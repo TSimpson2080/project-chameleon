@@ -14,6 +14,7 @@ let project = Project(
                         "UIColorName": "",
                         "UIImageName": "",
                     ],
+                    "NSPhotoLibraryUsageDescription": "Select photos to attach to change orders.",
                 ]
             ),
             buildableFolders: [
