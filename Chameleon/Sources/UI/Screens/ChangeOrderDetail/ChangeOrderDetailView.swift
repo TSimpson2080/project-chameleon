@@ -721,8 +721,8 @@ private struct LineItemEditorPayload: Identifiable {
 private struct LineItemDraft {
     var name: String = ""
     var details: String = ""
-    var quantityText: String = "1"
-    var unitPriceText: String = "0"
+    var quantityText: String = ""
+    var unitPriceText: String = ""
     var unit: String = ""
 
     var quantity: Decimal { Decimal(string: quantityText) ?? 0 }
@@ -755,18 +755,11 @@ private struct LineItemEditorSheet: View {
 
                 Section("Pricing") {
                     TextField("Quantity", text: $draft.quantityText)
-                        .keyboardType(.decimalPad)
+                        .keyboardType(.numberPad)
                     TextField("Unit Price", text: $draft.unitPriceText)
                         .keyboardType(.decimalPad)
                     TextField("Unit (optional)", text: $draft.unit)
                         .textInputAutocapitalization(.never)
-                }
-
-                if let errorMessage {
-                    Section {
-                        Text(errorMessage)
-                            .foregroundStyle(.red)
-                    }
                 }
             }
             .navigationTitle(title)
@@ -779,23 +772,70 @@ private struct LineItemEditorSheet: View {
                         .disabled(draft.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
+            .alert(
+                "Line Item Error",
+                isPresented: Binding(
+                    get: { errorMessage != nil },
+                    set: { if !$0 { errorMessage = nil } }
+                )
+            ) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(errorMessage ?? "Invalid line item.")
+            }
         }
     }
 
     private func save() {
         do {
             errorMessage = nil
-            try onSave(LineItemDraft(
-                name: draft.name.trimmingCharacters(in: .whitespacesAndNewlines),
-                details: draft.details.trimmingCharacters(in: .whitespacesAndNewlines),
-                quantityText: draft.quantityText.trimmingCharacters(in: .whitespacesAndNewlines),
-                unitPriceText: draft.unitPriceText.trimmingCharacters(in: .whitespacesAndNewlines),
-                unit: draft.unit.trimmingCharacters(in: .whitespacesAndNewlines)
-            ))
+
+            let name = draft.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            let details = draft.details.trimmingCharacters(in: .whitespacesAndNewlines)
+            let unit = draft.unit.trimmingCharacters(in: .whitespacesAndNewlines)
+
+            guard let quantity = parseQuantity(draft.quantityText) else {
+                errorMessage = "Enter quantity."
+                return
+            }
+            guard let unitPrice = parseMoney(draft.unitPriceText) else {
+                errorMessage = "Enter unit price."
+                return
+            }
+
+            let normalizedUnitPrice = Money.round(unitPrice)
+
+            try onSave(
+                LineItemDraft(
+                    name: name,
+                    details: details,
+                    quantityText: String(quantity),
+                    unitPriceText: NSDecimalNumber(decimal: normalizedUnitPrice).stringValue,
+                    unit: unit
+                )
+            )
             dismiss()
         } catch {
             errorMessage = (error as? LocalizedError)?.errorDescription ?? "Could not save line item."
         }
+    }
+
+    private func parseQuantity(_ raw: String) -> Int? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, let value = Int(trimmed), value > 0 else { return nil }
+        return value
+    }
+
+    private func parseMoney(_ raw: String) -> Decimal? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        let cleaned = trimmed
+            .replacingOccurrences(of: "$", with: "")
+            .replacingOccurrences(of: ",", with: "")
+
+        guard let value = Decimal(string: cleaned), value >= 0 else { return nil }
+        return value
     }
 }
 
