@@ -14,6 +14,11 @@ public struct ChangeOrderDetailView: View {
         let url: URL
     }
 
+    private struct VerifyExportPayload: Identifiable {
+        let id = UUID()
+        let initialZipURL: URL?
+    }
+
     @Environment(\.modelContext) private var modelContext
     @Bindable private var changeOrder: ChangeOrderModel
 
@@ -36,6 +41,9 @@ public struct ChangeOrderDetailView: View {
     @State private var exportSharePayload: ExportSharePayload?
     @State private var exportError: String?
     @State private var isExportingPackage = false
+
+    @State private var verifyExportPayload: VerifyExportPayload?
+    @State private var verifyExportError: String?
 
     @State private var didLoadDraftFields = false
     @State private var titleText: String = ""
@@ -71,6 +79,9 @@ public struct ChangeOrderDetailView: View {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
                     Button("Preview PDF") { generateDraftPDF() }
+                    Button("Verify Export ZIP…") {
+                        verifyExportPayload = VerifyExportPayload(initialZipURL: nil)
+                    }
                     if changeOrder.isLocked {
                         Button("Create Revision") {
                             Task { @MainActor in
@@ -110,6 +121,16 @@ public struct ChangeOrderDetailView: View {
                             }
                         }
                         .disabled(isExportingPackage)
+
+                        if let url = latestExportZipURL() {
+                            Button("Verify Last Export") {
+                                if FileManager.default.fileExists(atPath: url.path) {
+                                    verifyExportPayload = VerifyExportPayload(initialZipURL: url)
+                                } else {
+                                    verifyExportError = "Export ZIP not found at stored path."
+                                }
+                            }
+                        }
                     }
                 } label: {
                     Image(systemName: "ellipsis.circle")
@@ -129,6 +150,11 @@ public struct ChangeOrderDetailView: View {
         }
         .sheet(item: $exportSharePayload) { payload in
             ShareSheet(activityItems: [payload.url])
+        }
+        .sheet(item: $verifyExportPayload) { payload in
+            NavigationStack {
+                VerifyExportScreen(initialZipURL: payload.initialZipURL)
+            }
         }
         .sheet(item: $lineItemEditorPayload) { payload in
             LineItemEditorSheet(
@@ -162,6 +188,14 @@ public struct ChangeOrderDetailView: View {
             Button("OK", role: .cancel) { exportError = nil }
         } message: {
             Text(exportError ?? "")
+        }
+        .alert("Verify Export Failed", isPresented: Binding(
+            get: { verifyExportError != nil },
+            set: { if !$0 { verifyExportError = nil } }
+        )) {
+            Button("OK", role: .cancel) { verifyExportError = nil }
+        } message: {
+            Text(verifyExportError ?? "")
         }
         .alert("Line Item Error", isPresented: Binding(
             get: { lineItemError != nil },
@@ -539,6 +573,29 @@ public struct ChangeOrderDetailView: View {
         var descriptor = FetchDescriptor<CompanyProfileModel>()
         descriptor.fetchLimit = 1
         return (try? modelContext.fetch(descriptor).first)
+    }
+
+    private func latestExportZipURL() -> URL? {
+        guard let export = fetchLatestExportPackage() else { return nil }
+        guard let appSupport = try? FileManager.default.url(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask,
+            appropriateFor: nil,
+            create: true
+        ) else { return nil }
+        return appSupport.appendingPathComponent(export.zipPath)
+    }
+
+    private func fetchLatestExportPackage() -> ExportPackageModel? {
+        let changeOrderId = changeOrder.id
+        var descriptor = FetchDescriptor<ExportPackageModel>(
+            predicate: #Predicate<ExportPackageModel> { model in
+                model.changeOrderId == changeOrderId
+            },
+            sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
+        )
+        descriptor.fetchLimit = 1
+        return try? modelContext.fetch(descriptor).first
     }
 
     private func formatCurrency(_ value: Decimal) -> String {
