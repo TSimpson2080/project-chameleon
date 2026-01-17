@@ -1,5 +1,6 @@
 import Foundation
 import SwiftData
+import UIKit
 
 @Model
 public final class AttachmentModel {
@@ -29,5 +30,14 @@ public final class AttachmentModel {
         self.thumbnailPath = thumbnailPath
         self.caption = caption
         self.createdAt = createdAt
+    }
+
+    public var thumbnailImage: UIImage? {
+        guard let thumbnailPath else { return nil }
+        return FileStorageManager.shared.loadImage(at: thumbnailPath)
+    }
+
+    public var fullImage: UIImage? {
+        FileStorageManager.shared.loadImage(at: filePath)
     }
 }

@@ -39,12 +39,16 @@ public struct JobDetailView: View {
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(changeOrders, id: \.id) { changeOrder in
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(NumberingService.formatChangeOrderNumber(changeOrder.number))
-                                .font(.headline)
-                            Text(changeOrder.title)
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
+                        NavigationLink {
+                            ChangeOrderDetailView(changeOrder: changeOrder)
+                        } label: {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(NumberingService.formatChangeOrderNumber(changeOrder.number))
+                                    .font(.headline)
+                                Text(changeOrder.title)
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                     }
                 }
