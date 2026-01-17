@@ -13,6 +13,8 @@ struct JobPersistenceTests {
             ChangeOrderModel.self,
             LineItemModel.self,
             AttachmentModel.self,
+            AuditEventModel.self,
+            ExportPackageModel.self,
             configurations: configuration
         )
 
@@ -35,4 +37,3 @@ struct JobPersistenceTests {
         }
     }
 }
-

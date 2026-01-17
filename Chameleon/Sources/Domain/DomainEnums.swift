@@ -64,3 +64,26 @@ public enum AttachmentType: String, Codable, CaseIterable, Identifiable {
     public var id: String { rawValue }
 }
 
+public enum AuditAction: String, Codable, CaseIterable, Identifiable {
+    case jobCreated = "job_created"
+    case jobUpdated = "job_updated"
+    case changeOrderCreated = "co_created"
+    case changeOrderUpdated = "co_updated"
+    case photoAdded = "photo_added"
+    case signatureCaptured = "signature_captured"
+    case pdfPreviewed = "pdf_previewed"
+    case changeOrderLocked = "co_locked"
+    case revisionCreated = "revision_created"
+    case exportCreated = "export_created"
+
+    public var id: String { rawValue }
+}
+
+public enum AuditEntityType: String, Codable, CaseIterable, Identifiable {
+    case job = "job"
+    case changeOrder = "changeOrder"
+    case attachment = "attachment"
+    case export = "export"
+
+    public var id: String { rawValue }
+}

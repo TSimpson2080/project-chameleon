@@ -34,9 +34,11 @@ public final class ChangeOrderRepository {
     }
 
     private let modelContext: ModelContext
+    private let auditLogger: AuditLogger
 
     public init(modelContext: ModelContext) {
         self.modelContext = modelContext
+        self.auditLogger = AuditLogger(modelContext: modelContext)
     }
 
     @discardableResult
@@ -66,6 +68,18 @@ public final class ChangeOrderRepository {
         )
 
         modelContext.insert(changeOrder)
+        try auditLogger.record(
+            action: .changeOrderCreated,
+            entityType: .changeOrder,
+            entityId: changeOrder.id,
+            metadata: [
+                "jobId": job.id,
+                "number": safeNumber,
+                "revisionNumber": 0,
+            ],
+            now: now,
+            save: false
+        )
         try save()
         return changeOrder
     }
@@ -96,10 +110,205 @@ public final class ChangeOrderRepository {
     @MainActor
     public func updateDraft(_ changeOrder: ChangeOrderModel, mutate: (ChangeOrderModel) -> Void) throws {
         guard !changeOrder.isLocked else { throw RepositoryError.lockedRecordImmutable }
+        let beforeTitle = changeOrder.title
+        let beforeDetails = changeOrder.details
+        let beforeTaxRate = changeOrder.taxRate
+
         mutate(changeOrder)
         changeOrder.updatedAt = Date()
         changeOrder.job?.touchUpdatedAt()
+        let now = changeOrder.updatedAt
+
+        var changedFields: [String] = []
+        if changeOrder.title != beforeTitle { changedFields.append("title") }
+        if changeOrder.details != beforeDetails { changedFields.append("details") }
+        if changeOrder.taxRate != beforeTaxRate { changedFields.append("taxRate") }
+
+        if !changedFields.isEmpty {
+            try auditLogger.record(
+                action: .changeOrderUpdated,
+                entityType: .changeOrder,
+                entityId: changeOrder.id,
+                metadata: [
+                    "jobId": changeOrder.job?.id as Any,
+                    "number": changeOrder.number,
+                    "revisionNumber": changeOrder.revisionNumber,
+                    "fields": changedFields,
+                ],
+                now: now,
+                save: false
+            )
+        }
         try save()
+    }
+
+    @discardableResult
+    public func addLineItem(
+        changeOrder: ChangeOrderModel,
+        name: String,
+        details: String? = nil,
+        quantity: Decimal,
+        unitPrice: Decimal,
+        unit: String? = nil,
+        now: Date = Date()
+    ) throws -> LineItemModel {
+        guard !changeOrder.isLocked else { throw RepositoryError.lockedRecordImmutable }
+
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let maxIndex = changeOrder.lineItems.map(\.sortIndex).max() ?? -1
+
+        let item = LineItemModel(
+            changeOrder: changeOrder,
+            name: trimmedName.isEmpty ? "Untitled" : trimmedName,
+            details: details?.trimmingCharacters(in: .whitespacesAndNewlines),
+            quantity: quantity,
+            unitPrice: unitPrice,
+            unit: unit?.trimmingCharacters(in: .whitespacesAndNewlines),
+            sortIndex: maxIndex + 1,
+            createdAt: now
+        )
+        changeOrder.lineItems.append(item)
+
+        try recalculateTotals(changeOrder: changeOrder, now: now, recordAudit: true)
+        return item
+    }
+
+    public func updateLineItem(
+        lineItem: LineItemModel,
+        name: String,
+        details: String? = nil,
+        quantity: Decimal,
+        unitPrice: Decimal,
+        unit: String? = nil,
+        now: Date = Date()
+    ) throws {
+        guard let changeOrder = lineItem.changeOrder else { return }
+        guard !changeOrder.isLocked else { throw RepositoryError.lockedRecordImmutable }
+
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        lineItem.name = trimmedName.isEmpty ? "Untitled" : trimmedName
+        lineItem.details = details?.trimmingCharacters(in: .whitespacesAndNewlines)
+        lineItem.quantity = quantity
+        lineItem.unitPrice = unitPrice
+        lineItem.unit = unit?.trimmingCharacters(in: .whitespacesAndNewlines)
+        lineItem.touchUpdatedAt(now: now)
+
+        try recalculateTotals(changeOrder: changeOrder, now: now, recordAudit: true)
+    }
+
+    public func deleteLineItem(_ lineItem: LineItemModel, now: Date = Date()) throws {
+        guard let changeOrder = lineItem.changeOrder else { return }
+        guard !changeOrder.isLocked else { throw RepositoryError.lockedRecordImmutable }
+
+        changeOrder.lineItems.removeAll { $0.id == lineItem.id }
+        modelContext.delete(lineItem)
+        try reindexLineItems(changeOrder: changeOrder)
+        try recalculateTotals(changeOrder: changeOrder, now: now, recordAudit: true)
+    }
+
+    @discardableResult
+    public func addPhotoAttachment(
+        to changeOrder: ChangeOrderModel,
+        filePath: String,
+        thumbnailPath: String?,
+        caption: String? = nil,
+        now: Date = Date()
+    ) throws -> AttachmentModel {
+        guard !changeOrder.isLocked else { throw RepositoryError.lockedRecordImmutable }
+
+        let attachment = AttachmentModel(
+            changeOrder: changeOrder,
+            type: .photo,
+            filePath: filePath,
+            thumbnailPath: thumbnailPath,
+            caption: caption,
+            createdAt: now
+        )
+        changeOrder.attachments.append(attachment)
+        changeOrder.updatedAt = now
+        changeOrder.job?.touchUpdatedAt(now: now)
+
+        let totalPhotos = changeOrder.attachments.filter { $0.type == .photo }.count
+        try auditLogger.record(
+            action: .photoAdded,
+            entityType: .attachment,
+            entityId: attachment.id,
+            metadata: [
+                "changeOrderId": changeOrder.id,
+                "jobId": changeOrder.job?.id as Any,
+                "filePath": filePath,
+                "thumbnailPath": thumbnailPath as Any,
+                "totalPhotos": totalPhotos,
+            ],
+            now: now,
+            save: false
+        )
+
+        try save()
+        return attachment
+    }
+
+    public func captureClientSignature(
+        for changeOrder: ChangeOrderModel,
+        name: String,
+        signatureFilePath: String,
+        now: Date = Date()
+    ) throws {
+        guard !changeOrder.isLocked else { throw RepositoryError.lockedRecordImmutable }
+
+        changeOrder.clientSignatureName = name
+        changeOrder.updatedAt = now
+        changeOrder.job?.touchUpdatedAt(now: now)
+
+        if let existing = changeOrder.attachments.first(where: { $0.type == .signatureClient }) {
+            existing.filePath = signatureFilePath
+        } else {
+            let attachment = AttachmentModel(
+                changeOrder: changeOrder,
+                type: .signatureClient,
+                filePath: signatureFilePath,
+                createdAt: now
+            )
+            changeOrder.attachments.append(attachment)
+        }
+
+        try auditLogger.record(
+            action: .signatureCaptured,
+            entityType: .changeOrder,
+            entityId: changeOrder.id,
+            metadata: [
+                "jobId": changeOrder.job?.id as Any,
+                "number": changeOrder.number,
+                "revisionNumber": changeOrder.revisionNumber,
+                "signatureFilePath": signatureFilePath,
+                "hasName": !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+            ],
+            now: now,
+            save: false
+        )
+
+        try save()
+    }
+
+    public func recordPDFPreviewed(
+        changeOrder: ChangeOrderModel,
+        pdfByteCount: Int,
+        pdfHeader: String,
+        now: Date = Date()
+    ) throws {
+        try auditLogger.record(
+            action: .pdfPreviewed,
+            entityType: .changeOrder,
+            entityId: changeOrder.id,
+            metadata: [
+                "jobId": changeOrder.job?.id as Any,
+                "locked": changeOrder.isLocked,
+                "byteCount": pdfByteCount,
+                "header": pdfHeader,
+            ],
+            now: now,
+            save: true
+        )
     }
 
     @discardableResult
@@ -153,6 +362,19 @@ public final class ChangeOrderRepository {
         )
 
         modelContext.insert(revision)
+        try auditLogger.record(
+            action: .revisionCreated,
+            entityType: .changeOrder,
+            entityId: revision.id,
+            metadata: [
+                "jobId": job.id,
+                "number": number,
+                "revisionNumber": nextRevisionNumber,
+                "sourceChangeOrderId": lockedChangeOrder.id,
+            ],
+            now: now,
+            save: false
+        )
 
         let lockedId = lockedChangeOrder.persistentModelID
         let lineItems = try modelContext.fetch(FetchDescriptor<LineItemModel>(
@@ -160,12 +382,17 @@ public final class ChangeOrderRepository {
                 item.changeOrder?.persistentModelID == lockedId
             }
         ))
-        for item in lineItems {
+        for item in lineItems.sorted(by: { $0.sortIndex < $1.sortIndex }) {
             let copied = LineItemModel(
                 changeOrder: revision,
                 name: item.name,
+                details: item.details,
                 quantity: item.quantity,
-                unitPrice: item.unitPrice
+                unitPrice: item.unitPrice,
+                unit: item.unit,
+                sortIndex: item.sortIndex,
+                createdAt: item.createdAt,
+                updatedAt: item.updatedAt
             )
             revision.lineItems.append(copied)
         }
@@ -224,14 +451,30 @@ public final class ChangeOrderRepository {
         let photoURLs = photoAttachments.map { fileStorage.url(forRelativePath: $0.filePath) }
         let photoCaptions = photoAttachments.map(\.caption)
 
+        let sortedLineItems = changeOrder.lineItems.sorted { $0.sortIndex < $1.sortIndex }
+        let pdfLineItems = sortedLineItems.map { item in
+            let quantity = Money.nonNegative(item.quantity)
+            let unitPrice = Money.nonNegative(item.unitPrice)
+            let lineTotal = Money.round(quantity * unitPrice)
+            return PDFGenerator.Input.LineItem(
+                name: item.name,
+                quantity: quantity,
+                unitPrice: unitPrice,
+                lineTotal: lineTotal,
+                unit: item.unit
+            )
+        }
+
         let input = PDFGenerator.Input(
             changeOrderNumberText: NumberingService.formatDisplayNumber(number: changeOrder.number, revisionNumber: changeOrder.revisionNumber),
             title: changeOrder.title,
             details: changeOrder.details,
             createdAt: changeOrder.createdAt,
             subtotal: changeOrder.subtotal,
+            tax: pricing.tax,
             taxRate: changeOrder.taxRate,
             total: changeOrder.total,
+            lineItems: pdfLineItems,
             companyName: company?.companyName,
             jobClientName: job.clientName,
             jobProjectName: job.projectName,
@@ -257,6 +500,21 @@ public final class ChangeOrderRepository {
         changeOrder.signedPdfPath = signedPath
         changeOrder.signedPdfHash = hash
         changeOrder.updatedAt = now
+
+        try auditLogger.record(
+            action: .changeOrderLocked,
+            entityType: .changeOrder,
+            entityId: changeOrder.id,
+            metadata: [
+                "jobId": job.id,
+                "number": changeOrder.number,
+                "revisionNumber": changeOrder.revisionNumber,
+                "signedPdfPath": signedPath,
+                "signedPdfHash": hash,
+            ],
+            now: now,
+            save: false
+        )
 
         job.touchUpdatedAt(now: now)
         try save()
@@ -298,5 +556,42 @@ public final class ChangeOrderRepository {
         var descriptor = FetchDescriptor<CompanyProfileModel>()
         descriptor.fetchLimit = 1
         return try? modelContext.fetch(descriptor).first
+    }
+
+    private func reindexLineItems(changeOrder: ChangeOrderModel) throws {
+        let sorted = changeOrder.lineItems.sorted { lhs, rhs in
+            if lhs.sortIndex != rhs.sortIndex { return lhs.sortIndex < rhs.sortIndex }
+            return lhs.createdAt < rhs.createdAt
+        }
+        for (index, item) in sorted.enumerated() {
+            item.sortIndex = index
+        }
+    }
+
+    private func recalculateTotals(changeOrder: ChangeOrderModel, now: Date, recordAudit: Bool) throws {
+        let breakdown = PricingCalculator.calculate(lineItems: changeOrder.lineItems, taxRate: Money.clampTaxRate(changeOrder.taxRate))
+        changeOrder.subtotal = breakdown.subtotal
+        changeOrder.total = breakdown.total
+        changeOrder.updatedAt = now
+        changeOrder.job?.touchUpdatedAt(now: now)
+
+        if recordAudit {
+            try auditLogger.record(
+                action: .changeOrderUpdated,
+                entityType: .changeOrder,
+                entityId: changeOrder.id,
+                metadata: [
+                    "jobId": changeOrder.job?.id as Any,
+                    "number": changeOrder.number,
+                    "revisionNumber": changeOrder.revisionNumber,
+                    "fields": ["lineItems"],
+                    "lineItemCount": changeOrder.lineItems.count,
+                ],
+                now: now,
+                save: false
+            )
+        }
+
+        try save()
     }
 }

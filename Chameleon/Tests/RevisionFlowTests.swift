@@ -14,6 +14,8 @@ struct RevisionFlowTests {
             ChangeOrderModel.self,
             LineItemModel.self,
             AttachmentModel.self,
+            AuditEventModel.self,
+            ExportPackageModel.self,
             configurations: configuration
         )
 
@@ -92,6 +94,8 @@ struct RevisionFlowTests {
             ChangeOrderModel.self,
             LineItemModel.self,
             AttachmentModel.self,
+            AuditEventModel.self,
+            ExportPackageModel.self,
             configurations: configuration
         )
 

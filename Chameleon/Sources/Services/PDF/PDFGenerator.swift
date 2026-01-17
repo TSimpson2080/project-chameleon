@@ -4,13 +4,31 @@ import UIKit
 
 public enum PDFGenerator {
     public struct Input {
+        public struct LineItem {
+            public var name: String
+            public var quantity: Decimal
+            public var unitPrice: Decimal
+            public var lineTotal: Decimal
+            public var unit: String?
+
+            public init(name: String, quantity: Decimal, unitPrice: Decimal, lineTotal: Decimal, unit: String? = nil) {
+                self.name = name
+                self.quantity = quantity
+                self.unitPrice = unitPrice
+                self.lineTotal = lineTotal
+                self.unit = unit
+            }
+        }
+
         public var changeOrderNumberText: String
         public var title: String
         public var details: String
         public var createdAt: Date
         public var subtotal: Decimal
+        public var tax: Decimal
         public var taxRate: Decimal
         public var total: Decimal
+        public var lineItems: [LineItem]
         public var companyName: String?
         public var jobClientName: String
         public var jobProjectName: String?
@@ -28,8 +46,10 @@ public enum PDFGenerator {
             details: String,
             createdAt: Date,
             subtotal: Decimal,
+            tax: Decimal,
             taxRate: Decimal,
             total: Decimal,
+            lineItems: [LineItem] = [],
             companyName: String?,
             jobClientName: String,
             jobProjectName: String?,
@@ -46,8 +66,10 @@ public enum PDFGenerator {
             self.details = details
             self.createdAt = createdAt
             self.subtotal = subtotal
+            self.tax = tax
             self.taxRate = taxRate
             self.total = total
+            self.lineItems = lineItems
             self.companyName = companyName
             self.jobClientName = jobClientName
             self.jobProjectName = jobProjectName
@@ -132,16 +154,18 @@ public enum PDFGenerator {
         cursorY = drawText(input.details, font: bodyFont, in: cgContext, x: margin, y: cursorY, width: contentWidth)
 
         cursorY += 12
-        cursorY = drawText("Pricing", font: headerFont, in: cgContext, x: margin, y: cursorY, width: contentWidth)
-        cursorY = drawText("Subtotal: \(formatMoney(input.subtotal))", font: bodyFont, in: cgContext, x: margin, y: cursorY, width: contentWidth)
-        cursorY = drawText("Tax Rate: \(formatTaxRate(input.taxRate))", font: bodyFont, in: cgContext, x: margin, y: cursorY, width: contentWidth)
-        cursorY = drawText("Total: \(formatMoney(input.total))", font: bodyFont, in: cgContext, x: margin, y: cursorY, width: contentWidth)
-
-        if let terms = input.terms?.trimmingCharacters(in: .whitespacesAndNewlines), !terms.isEmpty {
-            cursorY += 12
-            cursorY = drawText("Terms", font: headerFont, in: cgContext, x: margin, y: cursorY, width: contentWidth)
-            cursorY = drawText(terms, font: smallFont, in: cgContext, x: margin, y: cursorY, width: contentWidth)
-        }
+        cursorY = drawLineItemsAndTotals(
+            in: cgContext,
+            bounds: bounds,
+            margin: margin,
+            cursorY: cursorY,
+            contentWidth: contentWidth,
+            headerFont: headerFont,
+            bodyFont: bodyFont,
+            smallFont: smallFont,
+            input: input,
+            mode: mode
+        )
 
         if mode == .signed {
             let signatureAreaTop = bounds.height - 160
@@ -164,6 +188,98 @@ public enum PDFGenerator {
                 drawImage(image, in: cgContext, rect: targetRect)
             }
         }
+    }
+
+    private static func drawLineItemsAndTotals(
+        in cgContext: CGContext,
+        bounds: CGRect,
+        margin: CGFloat,
+        cursorY: CGFloat,
+        contentWidth: CGFloat,
+        headerFont: UIFont,
+        bodyFont: UIFont,
+        smallFont: UIFont,
+        input: Input,
+        mode: Mode
+    ) -> CGFloat {
+        var y = cursorY
+        let bottomLimit: CGFloat = (mode == .signed) ? (bounds.height - 170) : (bounds.height - margin)
+
+        if !input.lineItems.isEmpty, y + 40 < bottomLimit {
+            y = drawText("Line Items", font: headerFont, in: cgContext, x: margin, y: y, width: contentWidth)
+
+            let colName: CGFloat = 260
+            let colQty: CGFloat = 60
+            let colUnitPrice: CGFloat = 100
+            let colTotal: CGFloat = contentWidth - colName - colQty - colUnitPrice
+
+            let headerRowFont = UIFont.systemFont(ofSize: 10, weight: .semibold)
+            let rowFont = UIFont.systemFont(ofSize: 10, weight: .regular)
+
+            y += 2
+            cgContext.setFillColor(UIColor.secondarySystemBackground.cgColor)
+            cgContext.fill(CGRect(x: margin, y: y, width: contentWidth, height: 18))
+
+            _ = drawTextAligned("Name", font: headerRowFont, alignment: .left, in: cgContext, x: margin + 4, y: y + 3, width: colName - 8)
+            _ = drawTextAligned("Qty", font: headerRowFont, alignment: .right, in: cgContext, x: margin + colName, y: y + 3, width: colQty - 8)
+            _ = drawTextAligned("Unit", font: headerRowFont, alignment: .right, in: cgContext, x: margin + colName + colQty, y: y + 3, width: colUnitPrice - 8)
+            _ = drawTextAligned("Total", font: headerRowFont, alignment: .right, in: cgContext, x: margin + colName + colQty + colUnitPrice, y: y + 3, width: colTotal - 8)
+
+            y += 18
+
+            for item in input.lineItems {
+                let rowHeight: CGFloat = 18
+                guard y + rowHeight < bottomLimit - 70 else { break }
+
+                _ = drawTextAligned(item.name, font: rowFont, alignment: .left, in: cgContext, x: margin + 4, y: y + 3, width: colName - 8)
+                _ = drawTextAligned(formatDecimal(item.quantity), font: rowFont, alignment: .right, in: cgContext, x: margin + colName, y: y + 3, width: colQty - 8)
+                _ = drawTextAligned(formatMoney(item.unitPrice), font: rowFont, alignment: .right, in: cgContext, x: margin + colName + colQty, y: y + 3, width: colUnitPrice - 8)
+                _ = drawTextAligned(formatMoney(item.lineTotal), font: rowFont, alignment: .right, in: cgContext, x: margin + colName + colQty + colUnitPrice, y: y + 3, width: colTotal - 8)
+
+                y += rowHeight
+            }
+
+            y += 8
+        }
+
+        if y + 60 < bottomLimit {
+            y = drawText("Totals", font: headerFont, in: cgContext, x: margin, y: y, width: contentWidth)
+            y = drawText("Subtotal: \(formatMoney(input.subtotal))", font: bodyFont, in: cgContext, x: margin, y: y, width: contentWidth)
+            y = drawText("Tax (\(formatTaxRate(input.taxRate))): \(formatMoney(input.tax))", font: bodyFont, in: cgContext, x: margin, y: y, width: contentWidth)
+            y = drawText("Total: \(formatMoney(input.total))", font: bodyFont, in: cgContext, x: margin, y: y, width: contentWidth)
+        }
+
+        if let terms = input.terms?.trimmingCharacters(in: .whitespacesAndNewlines), !terms.isEmpty {
+            y += 12
+            y = drawText("Terms", font: headerFont, in: cgContext, x: margin, y: y, width: contentWidth)
+            y = drawText(terms, font: smallFont, in: cgContext, x: margin, y: y, width: contentWidth)
+        }
+
+        return y
+    }
+
+    private static func drawTextAligned(
+        _ text: String,
+        font: UIFont,
+        alignment: NSTextAlignment,
+        in cgContext: CGContext,
+        x: CGFloat,
+        y: CGFloat,
+        width: CGFloat
+    ) -> CGFloat {
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineBreakMode = .byTruncatingTail
+        paragraph.alignment = alignment
+
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: UIColor.label,
+            .paragraphStyle: paragraph,
+        ]
+
+        let attributed = NSAttributedString(string: text, attributes: attributes)
+        attributed.draw(in: CGRect(x: x, y: y, width: width, height: 14))
+        return y + 14
     }
 
     private static func drawPhotoAppendix(in context: UIGraphicsPDFRendererContext, bounds: CGRect, photoURLs: [URL], captions: [String?]) {
@@ -258,6 +374,16 @@ public enum PDFGenerator {
         formatter.numberStyle = .currency
         formatter.currencyCode = "USD"
         formatter.minimumFractionDigits = 2
+        formatter.maximumFractionDigits = 2
+        return formatter.string(from: number) ?? "\(number)"
+    }
+
+    private static func formatDecimal(_ value: Decimal) -> String {
+        let number = NSDecimalNumber(decimal: value)
+        let formatter = NumberFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.numberStyle = .decimal
+        formatter.minimumFractionDigits = 0
         formatter.maximumFractionDigits = 2
         return formatter.string(from: number) ?? "\(number)"
     }

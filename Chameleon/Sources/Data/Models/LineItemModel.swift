@@ -7,28 +7,47 @@ public final class LineItemModel {
     public var id: UUID
     public var changeOrder: ChangeOrderModel?
 
+    public var createdAt: Date
+    public var updatedAt: Date
+
     public var name: String
+    public var details: String?
     public var quantity: Decimal
     public var unitPrice: Decimal
-    public var total: Decimal
+    public var unit: String?
+    public var sortIndex: Int
 
     public init(
         id: UUID = UUID(),
         changeOrder: ChangeOrderModel? = nil,
         name: String,
+        details: String? = nil,
         quantity: Decimal = 1,
         unitPrice: Decimal = 0,
-        total: Decimal? = nil
+        unit: String? = nil,
+        sortIndex: Int = 0,
+        createdAt: Date = Date(),
+        updatedAt: Date? = nil
     ) {
         self.id = id
         self.changeOrder = changeOrder
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt ?? createdAt
         self.name = name
+        self.details = details
         self.quantity = quantity
         self.unitPrice = unitPrice
-        self.total = total ?? (quantity * unitPrice)
+        self.unit = unit
+        self.sortIndex = sortIndex
     }
 
-    public func recalculateTotal() {
-        total = quantity * unitPrice
+    public func touchUpdatedAt(now: Date = Date()) {
+        updatedAt = now
+    }
+
+    public var lineTotal: Decimal {
+        quantity * unitPrice
     }
 }
+
+extension LineItemModel: Identifiable {}

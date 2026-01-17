@@ -4,9 +4,11 @@ import SwiftData
 @MainActor
 public final class JobRepository {
     private let modelContext: ModelContext
+    private let auditLogger: AuditLogger
 
     public init(modelContext: ModelContext) {
         self.modelContext = modelContext
+        self.auditLogger = AuditLogger(modelContext: modelContext)
     }
 
     @discardableResult
@@ -36,6 +38,17 @@ public final class JobRepository {
         )
 
         modelContext.insert(job)
+        try auditLogger.record(
+            action: .jobCreated,
+            entityType: .job,
+            entityId: job.id,
+            metadata: [
+                "hasProjectName": (projectName?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false),
+                "hasAddress": (address?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false),
+            ],
+            now: now,
+            save: false
+        )
         try save()
         return job
     }
@@ -64,6 +77,14 @@ public final class JobRepository {
 
     public func touchJob(_ job: JobModel, now: Date = Date()) throws {
         job.touchUpdatedAt(now: now)
+        try auditLogger.record(
+            action: .jobUpdated,
+            entityType: .job,
+            entityId: job.id,
+            metadata: [:],
+            now: now,
+            save: false
+        )
         try save()
     }
 
@@ -71,4 +92,3 @@ public final class JobRepository {
         try modelContext.save()
     }
 }
-

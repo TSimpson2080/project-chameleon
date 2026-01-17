@@ -67,9 +67,9 @@ public struct JobDetailView: View {
     }
 
     private func touchUpdatedAt() {
-        job.touchUpdatedAt()
         do {
-            try modelContext.save()
+            let repository = JobRepository(modelContext: modelContext)
+            try repository.touchJob(job)
         } catch {
             assertionFailure("Failed to save job update: \(error)")
         }
