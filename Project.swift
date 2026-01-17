@@ -23,19 +23,18 @@ let project = Project(
             destinations: .iOS,
             product: .app,
             bundleId: "com.tsimpson.chameleon",
-            infoPlist: .extendingDefault(
-                with: [
-                    "CFBundleShortVersionString": "1.0.0",
-                    "CFBundleVersion": "1",
-                    "NSPhotoLibraryUsageDescription": "Select photos to attach to change orders.",
-                    "NSPhotoLibraryAddUsageDescription": "Save exported PDFs and diagnostics to your photo library if you choose.",
-                    "UILaunchScreen": [
-                        "UIColorName": "",
-                        "UIImageName": "",
-                    ],
-                    "NSPhotoLibraryUsageDescription": "Select photos to attach to change orders.",
-                ]
-            ),
+	            infoPlist: .extendingDefault(
+	                with: [
+	                    "CFBundleShortVersionString": "1.0.0",
+	                    "CFBundleVersion": "1",
+	                    "NSPhotoLibraryUsageDescription": "Select photos to attach to change orders.",
+	                    "NSPhotoLibraryAddUsageDescription": "Save exported PDFs and diagnostics to your photo library if you choose.",
+	                    "UILaunchScreen": [
+	                        "UIColorName": "",
+	                        "UIImageName": "",
+	                    ],
+	                ]
+	            ),
             buildableFolders: [
                 "Chameleon/Sources",
                 "Chameleon/Resources",
