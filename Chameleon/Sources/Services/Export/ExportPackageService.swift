@@ -204,6 +204,7 @@ public final class ExportPackageService {
             changeOrderId: changeOrder.id,
             zipPath: "\(exportFolderRelativePath)/\(zipFileName)",
             zipSHA256: zipSHA256,
+            zipByteCount: zipData.count,
             manifestPath: "\(exportFolderRelativePath)/manifest.json",
             manifestSHA256: manifestSHA256
         )

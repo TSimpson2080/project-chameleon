@@ -19,6 +19,11 @@ public struct ChangeOrderDetailView: View {
         let initialZipURL: URL?
     }
 
+    private struct ExportsListPayload: Identifiable {
+        let id = UUID()
+        let changeOrderId: UUID
+    }
+
     @Environment(\.modelContext) private var modelContext
     @Bindable private var changeOrder: ChangeOrderModel
 
@@ -44,6 +49,8 @@ public struct ChangeOrderDetailView: View {
 
     @State private var verifyExportPayload: VerifyExportPayload?
     @State private var verifyExportError: String?
+
+    @State private var exportsListPayload: ExportsListPayload?
 
     @State private var didLoadDraftFields = false
     @State private var titleText: String = ""
@@ -81,6 +88,9 @@ public struct ChangeOrderDetailView: View {
                     Button("Preview PDF") { generateDraftPDF() }
                     Button("Verify Export ZIP…") {
                         verifyExportPayload = VerifyExportPayload(initialZipURL: nil)
+                    }
+                    Button("Exports") {
+                        exportsListPayload = ExportsListPayload(changeOrderId: changeOrder.id)
                     }
                     if changeOrder.isLocked {
                         Button("Create Revision") {
@@ -154,6 +164,11 @@ public struct ChangeOrderDetailView: View {
         .sheet(item: $verifyExportPayload) { payload in
             NavigationStack {
                 VerifyExportScreen(initialZipURL: payload.initialZipURL)
+            }
+        }
+        .sheet(item: $exportsListPayload) { payload in
+            NavigationStack {
+                ExportsListView(changeOrderId: payload.changeOrderId)
             }
         }
         .sheet(item: $lineItemEditorPayload) { payload in

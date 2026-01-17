@@ -57,7 +57,14 @@ public struct JobDetailView: View {
         .navigationTitle(job.clientName)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                NavigationLink {
+                    ExportsListView(jobId: job.id)
+                } label: {
+                    Image(systemName: "tray.full")
+                }
+                .accessibilityLabel("Exports")
+
                 Button("New Change Order") { createNewChangeOrder() }
             }
         }

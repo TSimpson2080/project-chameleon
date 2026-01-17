@@ -95,3 +95,11 @@ public enum AuditEntityType: String, Codable, CaseIterable, Identifiable {
 
     public var id: String { rawValue }
 }
+
+public enum ExportVerificationStatus: String, Codable, CaseIterable, Identifiable {
+    case unknown = "unknown"
+    case pass = "pass"
+    case fail = "fail"
+
+    public var id: String { rawValue }
+}
