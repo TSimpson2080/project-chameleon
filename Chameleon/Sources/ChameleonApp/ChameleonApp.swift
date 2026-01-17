@@ -12,7 +12,9 @@ struct ChameleonApp: App {
                 JobModel.self,
                 ChangeOrderModel.self,
                 LineItemModel.self,
-                AttachmentModel.self
+                AttachmentModel.self,
+                AuditEventModel.self,
+                ExportPackageModel.self
             )
         } catch {
             fatalError("Failed to create SwiftData ModelContainer: \(error)")

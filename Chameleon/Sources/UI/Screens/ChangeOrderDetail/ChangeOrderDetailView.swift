@@ -9,6 +9,11 @@ public struct ChangeOrderDetailView: View {
         let data: Data
     }
 
+    private struct ExportSharePayload: Identifiable {
+        let id = UUID()
+        let url: URL
+    }
+
     @Environment(\.modelContext) private var modelContext
     @Bindable private var changeOrder: ChangeOrderModel
 
@@ -28,9 +33,16 @@ public struct ChangeOrderDetailView: View {
     @State private var revisionError: String?
     @State private var isCreatingRevision = false
 
+    @State private var exportSharePayload: ExportSharePayload?
+    @State private var exportError: String?
+    @State private var isExportingPackage = false
+
     @State private var didLoadDraftFields = false
     @State private var titleText: String = ""
     @State private var detailsText: String = ""
+
+    @State private var lineItemEditorPayload: LineItemEditorPayload?
+    @State private var lineItemError: String?
 
     public init(changeOrder: ChangeOrderModel) {
         self.changeOrder = changeOrder
@@ -45,73 +57,13 @@ public struct ChangeOrderDetailView: View {
 
     public var body: some View {
         Form {
-            Section("Change Order") {
-                LabeledContent("Number", value: NumberingService.formatDisplayNumber(number: changeOrder.number, revisionNumber: changeOrder.revisionNumber))
-                if changeOrder.isLocked {
-                    LabeledContent("Locked", value: "Yes")
-                }
-            }
-
-            Section("Details") {
-                TextField("Title", text: $titleText)
-                    .disabled(changeOrder.isLocked)
-                TextEditor(text: $detailsText)
-                    .frame(minHeight: 120)
-                    .disabled(changeOrder.isLocked)
-            }
-
-            Section("Photos") {
-                PhotosPicker(
-                    selection: $selectedPhotos,
-                    maxSelectionCount: 5,
-                    matching: .images
-                ) {
-                    Text("Add Photo")
-                }
-                .disabled(changeOrder.isLocked)
-
-                if let photoErrorMessage {
-                    Text(photoErrorMessage)
-                        .foregroundStyle(.red)
-                }
-
-                if !photoAttachments.isEmpty {
-                    ScrollView(.horizontal) {
-                        HStack(spacing: 12) {
-                            ForEach(photoAttachments, id: \.id) { attachment in
-                                PhotoThumbnailView(thumbnailPath: attachment.thumbnailPath, filePath: attachment.filePath)
-                            }
-                        }
-                        .padding(.vertical, 4)
-                    }
-                }
-            }
-
-            Section {
-                if !changeOrder.isLocked {
-                    Button("Capture Signature") { isPresentingSignatureCapture = true }
-                    Button("Sign and Lock") { lock() }
-                        .buttonStyle(.borderedProminent)
-                }
-            }
-
-            if changeOrder.isLocked {
-                Section("Revisions") {
-                    ForEach(revisionsForNumber, id: \.id) { co in
-                        NavigationLink {
-                            ChangeOrderDetailView(changeOrder: co)
-                        } label: {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(NumberingService.formatDisplayNumber(number: co.number, revisionNumber: co.revisionNumber))
-                                    .font(.headline)
-                                Text(co.isLocked ? "Locked" : "Draft")
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                    }
-                }
-            }
+            changeOrderSection
+            detailsSection
+            photosSection
+            lineItemsSection
+            totalsSection
+            actionsSection
+            if changeOrder.isLocked { revisionsSection }
         }
         .navigationTitle("Change Order")
         .navigationBarTitleDisplayMode(.inline)
@@ -139,6 +91,25 @@ public struct ChangeOrderDetailView: View {
                             }
                         }
                         .disabled(isCreatingRevision)
+
+                        Button("Export Package") {
+                            Task { @MainActor in
+                                guard !isExportingPackage else { return }
+                                isExportingPackage = true
+                                defer { isExportingPackage = false }
+
+                                do {
+                                    guard let job = changeOrder.job else { throw ExportPackageService.ExportError.missingJob }
+                                    let service = try ExportPackageService(modelContext: modelContext)
+                                    let export = try service.exportChangeOrderPackage(changeOrder: changeOrder, job: job)
+                                    let zipURL = service.urlForExportRelativePath(export.zipPath)
+                                    exportSharePayload = ExportSharePayload(url: zipURL)
+                                } catch {
+                                    exportError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                                }
+                            }
+                        }
+                        .disabled(isExportingPackage)
                     }
                 } label: {
                     Image(systemName: "ellipsis.circle")
@@ -156,6 +127,18 @@ public struct ChangeOrderDetailView: View {
                 ChangeOrderDetailView(changeOrder: co)
             }
         }
+        .sheet(item: $exportSharePayload) { payload in
+            ShareSheet(activityItems: [payload.url])
+        }
+        .sheet(item: $lineItemEditorPayload) { payload in
+            LineItemEditorSheet(
+                title: payload.mode.isAdd ? "Add Line Item" : "Edit Line Item",
+                initial: payload.mode.initialDraft,
+                onSave: { draft in
+                    try saveLineItem(payload: payload, draft: draft)
+                }
+            )
+        }
         .alert("PDF Error", isPresented: Binding(
             get: { pdfErrorMessage != nil },
             set: { if !$0 { pdfErrorMessage = nil } }
@@ -172,21 +155,28 @@ public struct ChangeOrderDetailView: View {
         } message: {
             Text(revisionError ?? "")
         }
+        .alert("Export Failed", isPresented: Binding(
+            get: { exportError != nil },
+            set: { if !$0 { exportError = nil } }
+        )) {
+            Button("OK", role: .cancel) { exportError = nil }
+        } message: {
+            Text(exportError ?? "")
+        }
+        .alert("Line Item Error", isPresented: Binding(
+            get: { lineItemError != nil },
+            set: { if !$0 { lineItemError = nil } }
+        )) {
+            Button("OK", role: .cancel) { lineItemError = nil }
+        } message: {
+            Text(lineItemError ?? "")
+        }
         .sheet(isPresented: $isPresentingSignatureCapture) {
             SignatureCaptureView(title: "Client Signature", initialName: changeOrder.clientSignatureName ?? "") { name, image in
-                let repository = ChangeOrderRepository(modelContext: modelContext)
                 let fileStorage = try FileStorageManager()
                 let path = try fileStorage.saveSignaturePNG(image)
-
-                try repository.updateDraft(changeOrder) { draft in
-                    draft.clientSignatureName = name
-                    if let existing = draft.attachments.first(where: { $0.type == .signatureClient }) {
-                        existing.filePath = path
-                    } else {
-                        let attachment = AttachmentModel(changeOrder: draft, type: .signatureClient, filePath: path)
-                        draft.attachments.append(attachment)
-                    }
-                }
+                let repository = ChangeOrderRepository(modelContext: modelContext)
+                try repository.captureClientSignature(for: changeOrder, name: name, signatureFilePath: path)
             }
         }
         .alert("Lock Error", isPresented: $isPresentingLockError) {
@@ -209,10 +199,148 @@ public struct ChangeOrderDetailView: View {
         .safeAreaInset(edge: .bottom) {
             Color.clear.frame(height: 80)
         }
+        .overlay {
+            if isExportingPackage {
+                ZStack {
+                    Color.black.opacity(0.1)
+                        .ignoresSafeArea()
+                    ProgressView("Exporting…")
+                        .padding()
+                        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
+                }
+            }
+        }
     }
 
     private var photoAttachments: [AttachmentModel] {
         changeOrder.attachments.filter { $0.type == .photo }
+    }
+
+    private var sortedLineItems: [LineItemModel] {
+        changeOrder.lineItems.sorted { lhs, rhs in
+            if lhs.sortIndex != rhs.sortIndex { return lhs.sortIndex < rhs.sortIndex }
+            return lhs.createdAt < rhs.createdAt
+        }
+    }
+
+    private var taxRate: Decimal {
+        Money.clampTaxRate(changeOrder.taxRate)
+    }
+
+    private var pricingBreakdown: PricingBreakdown {
+        PricingCalculator.calculate(lineItems: changeOrder.lineItems, taxRate: taxRate)
+    }
+
+    private var changeOrderSection: some View {
+        Section("Change Order") {
+            LabeledContent("Number", value: NumberingService.formatDisplayNumber(number: changeOrder.number, revisionNumber: changeOrder.revisionNumber))
+            if changeOrder.isLocked {
+                LabeledContent("Locked", value: "Yes")
+            }
+        }
+    }
+
+    private var detailsSection: some View {
+        Section("Details") {
+            TextField("Title", text: $titleText)
+                .disabled(changeOrder.isLocked)
+            TextEditor(text: $detailsText)
+                .frame(minHeight: 120)
+                .disabled(changeOrder.isLocked)
+        }
+    }
+
+    private var photosSection: some View {
+        Section("Photos") {
+            PhotosPicker(
+                selection: $selectedPhotos,
+                maxSelectionCount: 5,
+                matching: .images
+            ) {
+                Text("Add Photo")
+            }
+            .disabled(changeOrder.isLocked)
+
+            if let photoErrorMessage {
+                Text(photoErrorMessage)
+                    .foregroundStyle(.red)
+            }
+
+            if !photoAttachments.isEmpty {
+                ScrollView(.horizontal) {
+                    HStack(spacing: 12) {
+                        ForEach(photoAttachments, id: \.id) { attachment in
+                            PhotoThumbnailView(thumbnailPath: attachment.thumbnailPath, filePath: attachment.filePath)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+        }
+    }
+
+    private var lineItemsSection: some View {
+        Section("Line Items") {
+            if sortedLineItems.isEmpty {
+                Text("No line items yet.")
+                    .foregroundStyle(.secondary)
+            } else if changeOrder.isLocked {
+                ForEach(sortedLineItems, id: \.id) { item in
+                    LineItemRow(item: item)
+                }
+            } else {
+                ForEach(sortedLineItems, id: \.id) { item in
+                    Button {
+                        lineItemEditorPayload = LineItemEditorPayload(mode: .edit(item))
+                    } label: {
+                        LineItemRow(item: item)
+                    }
+                }
+                .onDelete(perform: deleteLineItems)
+            }
+
+            if !changeOrder.isLocked {
+                Button("Add Line Item") {
+                    lineItemEditorPayload = LineItemEditorPayload(mode: .add)
+                }
+            }
+        }
+    }
+
+    private var totalsSection: some View {
+        Section("Totals") {
+            LabeledContent("Subtotal", value: formatCurrency(pricingBreakdown.subtotal))
+            LabeledContent("Tax (\(formatPercent(taxRate)))", value: formatCurrency(pricingBreakdown.tax))
+            LabeledContent("Total", value: formatCurrency(pricingBreakdown.total))
+        }
+    }
+
+    private var actionsSection: some View {
+        Section {
+            if !changeOrder.isLocked {
+                Button("Capture Signature") { isPresentingSignatureCapture = true }
+                Button("Sign and Lock") { lock() }
+                    .buttonStyle(.borderedProminent)
+            }
+        }
+    }
+
+    private var revisionsSection: some View {
+        Section("Revisions") {
+            ForEach(revisionsForNumber, id: \.id) { co in
+                NavigationLink {
+                    ChangeOrderDetailView(changeOrder: co)
+                } label: {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(NumberingService.formatDisplayNumber(number: co.number, revisionNumber: co.revisionNumber))
+                            .font(.headline)
+                        Text(co.isLocked ? "Locked" : "Draft")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
     }
 
     private func addSelectedPhotos(_ items: [PhotosPickerItem]) {
@@ -231,20 +359,51 @@ public struct ChangeOrderDetailView: View {
                     let filePath = try fileStorage.saveImage(original: image, quality: 0.85)
                     let thumbnailPath = try fileStorage.generateThumbnail(from: filePath, maxDimension: 300)
 
-                    try repository.updateDraft(changeOrder) { draft in
-                        let attachment = AttachmentModel(
-                            changeOrder: draft,
-                            type: .photo,
-                            filePath: filePath,
-                            thumbnailPath: thumbnailPath,
-                            caption: nil
-                        )
-                        draft.attachments.append(attachment)
-                    }
+                    _ = try repository.addPhotoAttachment(
+                        to: changeOrder,
+                        filePath: filePath,
+                        thumbnailPath: thumbnailPath,
+                        caption: nil
+                    )
                 }
             } catch {
                 photoErrorMessage = "Could not add photo(s)."
             }
+        }
+    }
+
+    private func deleteLineItems(at offsets: IndexSet) {
+        do {
+            let repository = ChangeOrderRepository(modelContext: modelContext)
+            for index in offsets {
+                try repository.deleteLineItem(sortedLineItems[index])
+            }
+        } catch {
+            lineItemError = (error as? LocalizedError)?.errorDescription ?? "Could not delete line item."
+        }
+    }
+
+    private func saveLineItem(payload: LineItemEditorPayload, draft: LineItemDraft) throws {
+        let repository = ChangeOrderRepository(modelContext: modelContext)
+        switch payload.mode {
+        case .add:
+            _ = try repository.addLineItem(
+                changeOrder: changeOrder,
+                name: draft.name,
+                details: draft.details,
+                quantity: draft.quantity,
+                unitPrice: draft.unitPrice,
+                unit: draft.unit
+            )
+        case .edit(let item):
+            try repository.updateLineItem(
+                lineItem: item,
+                name: draft.name,
+                details: draft.details,
+                quantity: draft.quantity,
+                unitPrice: draft.unitPrice,
+                unit: draft.unit
+            )
         }
     }
 
@@ -280,6 +439,9 @@ public struct ChangeOrderDetailView: View {
                     pdfErrorMessage = "Stored signed PDF is invalid."
                     return
                 }
+                let repository = ChangeOrderRepository(modelContext: modelContext)
+                let header = String(data: data.prefix(8), encoding: .ascii) ?? "<non-ascii>"
+                try? repository.recordPDFPreviewed(changeOrder: changeOrder, pdfByteCount: data.count, pdfHeader: header)
                 pdfPreview = PDFPreviewPayload(data: data)
                 return
             }
@@ -287,14 +449,30 @@ public struct ChangeOrderDetailView: View {
             let signaturePath = changeOrder.attachments.first(where: { $0.type == .signatureClient })?.filePath
             let signatureImage = signaturePath.map { UIImage(contentsOfFile: fileStorage.url(forRelativePath: $0).path) } ?? nil
 
+            let breakdown = PricingCalculator.calculate(lineItems: changeOrder.lineItems, taxRate: Money.clampTaxRate(changeOrder.taxRate))
+            let pdfLineItems = sortedLineItems.map { item in
+                let quantity = Money.nonNegative(item.quantity)
+                let unitPrice = Money.nonNegative(item.unitPrice)
+                let lineTotal = Money.round(quantity * unitPrice)
+                return PDFGenerator.Input.LineItem(
+                    name: item.name,
+                    quantity: quantity,
+                    unitPrice: unitPrice,
+                    lineTotal: lineTotal,
+                    unit: item.unit
+                )
+            }
+
             let input = PDFGenerator.Input(
                 changeOrderNumberText: NumberingService.formatDisplayNumber(number: changeOrder.number, revisionNumber: changeOrder.revisionNumber),
                 title: changeOrder.title,
                 details: changeOrder.details,
                 createdAt: changeOrder.createdAt,
-                subtotal: changeOrder.subtotal,
+                subtotal: breakdown.subtotal,
+                tax: breakdown.tax,
                 taxRate: changeOrder.taxRate,
-                total: changeOrder.total,
+                total: breakdown.total,
+                lineItems: pdfLineItems,
                 companyName: company?.companyName,
                 jobClientName: job.clientName,
                 jobProjectName: job.projectName,
@@ -313,6 +491,9 @@ public struct ChangeOrderDetailView: View {
                 pdfErrorMessage = "Generated draft PDF is invalid."
                 return
             }
+            let repository = ChangeOrderRepository(modelContext: modelContext)
+            let header = String(data: data.prefix(8), encoding: .ascii) ?? "<non-ascii>"
+            try? repository.recordPDFPreviewed(changeOrder: changeOrder, pdfByteCount: data.count, pdfHeader: header)
             pdfPreview = PDFPreviewPayload(data: data)
         } catch {
             print("generatePDFPreview error: \(error)")
@@ -353,6 +534,191 @@ public struct ChangeOrderDetailView: View {
         var descriptor = FetchDescriptor<CompanyProfileModel>()
         descriptor.fetchLimit = 1
         return (try? modelContext.fetch(descriptor).first)
+    }
+
+    private func formatCurrency(_ value: Decimal) -> String {
+        let number = NSDecimalNumber(decimal: Money.round(value))
+        let formatter = NumberFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.numberStyle = .currency
+        formatter.currencyCode = "USD"
+        formatter.minimumFractionDigits = 2
+        formatter.maximumFractionDigits = 2
+        return formatter.string(from: number) ?? "\(number)"
+    }
+
+    private func formatPercent(_ value: Decimal) -> String {
+        let percent = NSDecimalNumber(decimal: Money.round(value * 100, scale: 2))
+        let formatter = NumberFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.numberStyle = .decimal
+        formatter.minimumFractionDigits = 0
+        formatter.maximumFractionDigits = 2
+        let text = formatter.string(from: percent) ?? "\(percent)"
+        return "\(text)%"
+    }
+}
+
+private struct LineItemRow: View {
+    let item: LineItemModel
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(item.name)
+                    .foregroundStyle(.primary)
+
+                HStack(spacing: 6) {
+                    Text("\(formatDecimal(item.quantity))")
+                    Text("×")
+                    Text(formatCurrency(item.unitPrice))
+                    if let unit = item.unit?.trimmingCharacters(in: .whitespacesAndNewlines), !unit.isEmpty {
+                        Text(unit)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            Text(formatCurrency(item.lineTotal))
+                .font(.subheadline)
+                .foregroundStyle(.primary)
+        }
+    }
+
+    private func formatCurrency(_ value: Decimal) -> String {
+        let number = NSDecimalNumber(decimal: Money.round(value))
+        let formatter = NumberFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.numberStyle = .currency
+        formatter.currencyCode = "USD"
+        formatter.minimumFractionDigits = 2
+        formatter.maximumFractionDigits = 2
+        return formatter.string(from: number) ?? "\(number)"
+    }
+
+    private func formatDecimal(_ value: Decimal) -> String {
+        let number = NSDecimalNumber(decimal: Money.round(value))
+        let formatter = NumberFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.numberStyle = .decimal
+        formatter.minimumFractionDigits = 0
+        formatter.maximumFractionDigits = 2
+        return formatter.string(from: number) ?? "\(number)"
+    }
+}
+
+private struct LineItemEditorPayload: Identifiable {
+    enum Mode {
+        case add
+        case edit(LineItemModel)
+
+        var isAdd: Bool {
+            if case .add = self { return true }
+            return false
+        }
+
+        var initialDraft: LineItemDraft {
+            switch self {
+            case .add:
+                return LineItemDraft()
+            case .edit(let item):
+                return LineItemDraft(
+                    name: item.name,
+                    details: item.details ?? "",
+                    quantityText: NSDecimalNumber(decimal: item.quantity).stringValue,
+                    unitPriceText: NSDecimalNumber(decimal: item.unitPrice).stringValue,
+                    unit: item.unit ?? ""
+                )
+            }
+        }
+    }
+
+    let id = UUID()
+    let mode: Mode
+}
+
+private struct LineItemDraft {
+    var name: String = ""
+    var details: String = ""
+    var quantityText: String = "1"
+    var unitPriceText: String = "0"
+    var unit: String = ""
+
+    var quantity: Decimal { Decimal(string: quantityText) ?? 0 }
+    var unitPrice: Decimal { Decimal(string: unitPriceText) ?? 0 }
+}
+
+private struct LineItemEditorSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var draft: LineItemDraft
+    @State private var errorMessage: String?
+
+    let title: String
+    let onSave: (LineItemDraft) throws -> Void
+
+    init(title: String, initial: LineItemDraft, onSave: @escaping (LineItemDraft) throws -> Void) {
+        self.title = title
+        self._draft = State(initialValue: initial)
+        self.onSave = onSave
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Item") {
+                    TextField("Name", text: $draft.name)
+                        .textInputAutocapitalization(.words)
+                    TextField("Description (optional)", text: $draft.details, axis: .vertical)
+                        .lineLimit(2...4)
+                }
+
+                Section("Pricing") {
+                    TextField("Quantity", text: $draft.quantityText)
+                        .keyboardType(.decimalPad)
+                    TextField("Unit Price", text: $draft.unitPriceText)
+                        .keyboardType(.decimalPad)
+                    TextField("Unit (optional)", text: $draft.unit)
+                        .textInputAutocapitalization(.never)
+                }
+
+                if let errorMessage {
+                    Section {
+                        Text(errorMessage)
+                            .foregroundStyle(.red)
+                    }
+                }
+            }
+            .navigationTitle(title)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") { save() }
+                        .disabled(draft.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
+    }
+
+    private func save() {
+        do {
+            errorMessage = nil
+            try onSave(LineItemDraft(
+                name: draft.name.trimmingCharacters(in: .whitespacesAndNewlines),
+                details: draft.details.trimmingCharacters(in: .whitespacesAndNewlines),
+                quantityText: draft.quantityText.trimmingCharacters(in: .whitespacesAndNewlines),
+                unitPriceText: draft.unitPriceText.trimmingCharacters(in: .whitespacesAndNewlines),
+                unit: draft.unit.trimmingCharacters(in: .whitespacesAndNewlines)
+            ))
+            dismiss()
+        } catch {
+            errorMessage = (error as? LocalizedError)?.errorDescription ?? "Could not save line item."
+        }
     }
 }
 
