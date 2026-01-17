@@ -16,6 +16,7 @@ public final class FileStorageManager {
     private let photosDirectory = "Attachments/Photos"
     private let thumbnailsDirectory = "Attachments/Thumbnails"
     private let signaturesDirectory = "Attachments/Signatures"
+    private let logosDirectory = "Company/Logos"
     private let pdfDraftsDirectory = "PDFs/Drafts"
     private let pdfSignedDirectory = "PDFs/Signed"
 
@@ -48,6 +49,7 @@ public final class FileStorageManager {
             photosDirectory,
             thumbnailsDirectory,
             signaturesDirectory,
+            logosDirectory,
             pdfDraftsDirectory,
             pdfSignedDirectory,
         ]
@@ -77,6 +79,14 @@ public final class FileStorageManager {
         try fileManager.removeItem(at: url)
     }
 
+    public func loadImage(atRelativePath relativePath: String) throws -> UIImage {
+        let url = url(forRelativePath: relativePath)
+        guard let image = UIImage(contentsOfFile: url.path) else {
+            throw StorageError.couldNotLoadImage(url)
+        }
+        return image
+    }
+
     public func saveImage(original: UIImage, quality: CGFloat = 0.85) throws -> String {
         let fileName = "\(UUID().uuidString).jpg"
         let relativePath = "\(photosDirectory)/\(fileName)"
@@ -93,6 +103,28 @@ public final class FileStorageManager {
         }
 
         return relativePath
+    }
+
+    public func saveLogoImage(original: UIImage) throws -> String {
+        let fileName = "\(UUID().uuidString).png"
+        let relativePath = "\(logosDirectory)/\(fileName)"
+        let url = url(forRelativePath: relativePath)
+
+        guard let data = original.pngData() else {
+            throw StorageError.couldNotWriteFile(url)
+        }
+
+        do {
+            try data.write(to: url, options: [.atomic])
+        } catch {
+            throw StorageError.couldNotWriteFile(url)
+        }
+
+        return relativePath
+    }
+
+    public func deleteLogo(atRelativePath relativePath: String) throws {
+        try deleteFile(atRelativePath: relativePath)
     }
 
     public func saveSignaturePNG(_ image: UIImage) throws -> String {

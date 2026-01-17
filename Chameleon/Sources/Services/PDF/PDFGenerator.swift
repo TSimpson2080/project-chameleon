@@ -30,6 +30,7 @@ public enum PDFGenerator {
         public var total: Decimal
         public var lineItems: [LineItem]
         public var companyName: String?
+        public var companyLogoImage: UIImage?
         public var jobClientName: String
         public var jobProjectName: String?
         public var jobAddress: String?
@@ -51,6 +52,7 @@ public enum PDFGenerator {
             total: Decimal,
             lineItems: [LineItem] = [],
             companyName: String?,
+            companyLogoImage: UIImage? = nil,
             jobClientName: String,
             jobProjectName: String?,
             jobAddress: String?,
@@ -71,6 +73,7 @@ public enum PDFGenerator {
             self.total = total
             self.lineItems = lineItems
             self.companyName = companyName
+            self.companyLogoImage = companyLogoImage
             self.jobClientName = jobClientName
             self.jobProjectName = jobProjectName
             self.jobAddress = jobAddress
@@ -125,7 +128,22 @@ public enum PDFGenerator {
         let smallFont = UIFont.systemFont(ofSize: 10, weight: .regular)
 
         let company = (input.companyName?.trimmingCharacters(in: .whitespacesAndNewlines)).flatMap { $0.isEmpty ? nil : $0 } ?? "Chameleon"
-        cursorY = drawText(company, font: titleFont, in: cgContext, x: margin, y: cursorY, width: contentWidth)
+        let logoSize: CGFloat = 44
+        let logoPadding: CGFloat = 10
+        if let logo = input.companyLogoImage {
+            let logoRect = CGRect(x: margin, y: margin, width: logoSize, height: logoSize)
+            drawImage(logo, in: cgContext, rect: logoRect)
+            cursorY = drawText(
+                company,
+                font: titleFont,
+                in: cgContext,
+                x: margin + logoSize + logoPadding,
+                y: cursorY,
+                width: contentWidth - (logoSize + logoPadding)
+            )
+        } else {
+            cursorY = drawText(company, font: titleFont, in: cgContext, x: margin, y: cursorY, width: contentWidth)
+        }
 
         let label = (mode == .draft) ? "DRAFT" : "SIGNED"
         let labelAttributes: [NSAttributedString.Key: Any] = [

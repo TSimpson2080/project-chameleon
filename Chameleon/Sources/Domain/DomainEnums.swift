@@ -64,6 +64,14 @@ public enum AttachmentType: String, Codable, CaseIterable, Identifiable {
     public var id: String { rawValue }
 }
 
+public enum LineItemCategory: String, Codable, CaseIterable, Identifiable {
+    case material = "material"
+    case labor = "labor"
+    case other = "other"
+
+    public var id: String { rawValue }
+}
+
 public enum AuditAction: String, Codable, CaseIterable, Identifiable {
     case jobCreated = "job_created"
     case jobUpdated = "job_updated"

@@ -36,6 +36,10 @@ struct PDFGeneratorTests {
         let document = PDFDocument(data: data)
         #expect(document != nil)
         #expect((document?.pageCount ?? 0) >= 1)
+
+        let page = try #require(document?.page(at: 0))
+        let text = page.string ?? ""
+        #expect(text.contains("Test Co"))
     }
 
     @Test func pdfContainsLineItemAndTotalText() throws {

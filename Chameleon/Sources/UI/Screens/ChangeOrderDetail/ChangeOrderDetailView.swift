@@ -448,6 +448,10 @@ public struct ChangeOrderDetailView: View {
 
             let signaturePath = changeOrder.attachments.first(where: { $0.type == .signatureClient })?.filePath
             let signatureImage = signaturePath.map { UIImage(contentsOfFile: fileStorage.url(forRelativePath: $0).path) } ?? nil
+            let companyName = company?.companyName.trimmingCharacters(in: .whitespacesAndNewlines)
+            let companyLogoImage = company?.logoPath.flatMap { logoPath in
+                UIImage(contentsOfFile: fileStorage.url(forRelativePath: logoPath).path)
+            }
 
             let breakdown = PricingCalculator.calculate(lineItems: changeOrder.lineItems, taxRate: Money.clampTaxRate(changeOrder.taxRate))
             let pdfLineItems = sortedLineItems.map { item in
@@ -473,7 +477,8 @@ public struct ChangeOrderDetailView: View {
                 taxRate: changeOrder.taxRate,
                 total: breakdown.total,
                 lineItems: pdfLineItems,
-                companyName: company?.companyName,
+                companyName: (companyName?.isEmpty ?? true) ? nil : companyName,
+                companyLogoImage: companyLogoImage,
                 jobClientName: job.clientName,
                 jobProjectName: job.projectName,
                 jobAddress: job.address,
