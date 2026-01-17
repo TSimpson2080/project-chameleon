@@ -38,6 +38,7 @@ struct LineItemRepositoryTests {
             unit: "hrs"
         )
 
+        #expect(item.category == .other)
         #expect(changeOrder.subtotal == 200)
         #expect(changeOrder.total == 220)
 
@@ -108,4 +109,3 @@ struct LineItemRepositoryTests {
         }
     }
 }
-

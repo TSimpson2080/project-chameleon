@@ -161,6 +161,7 @@ public final class ChangeOrderRepository {
             changeOrder: changeOrder,
             name: trimmedName.isEmpty ? "Untitled" : trimmedName,
             details: details?.trimmingCharacters(in: .whitespacesAndNewlines),
+            category: .other,
             quantity: quantity,
             unitPrice: unitPrice,
             unit: unit?.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -387,6 +388,7 @@ public final class ChangeOrderRepository {
                 changeOrder: revision,
                 name: item.name,
                 details: item.details,
+                category: item.category,
                 quantity: item.quantity,
                 unitPrice: item.unitPrice,
                 unit: item.unit,
@@ -447,6 +449,10 @@ public final class ChangeOrderRepository {
         changeOrder.total = pricing.total
 
         let company = fetchCompanyProfile()
+        let companyName = company?.companyName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let companyLogoImage = company?.logoPath.flatMap { logoPath in
+            UIImage(contentsOfFile: fileStorage.url(forRelativePath: logoPath).path)
+        }
         let photoAttachments = changeOrder.attachments.filter { $0.type == .photo }
         let photoURLs = photoAttachments.map { fileStorage.url(forRelativePath: $0.filePath) }
         let photoCaptions = photoAttachments.map(\.caption)
@@ -475,7 +481,8 @@ public final class ChangeOrderRepository {
             taxRate: changeOrder.taxRate,
             total: changeOrder.total,
             lineItems: pdfLineItems,
-            companyName: company?.companyName,
+            companyName: (companyName?.isEmpty ?? true) ? nil : companyName,
+            companyLogoImage: companyLogoImage,
             jobClientName: job.clientName,
             jobProjectName: job.projectName,
             jobAddress: job.address,
@@ -576,6 +583,8 @@ public final class ChangeOrderRepository {
         changeOrder.job?.touchUpdatedAt(now: now)
 
         if recordAudit {
+            let categoryCounts = Dictionary(grouping: changeOrder.lineItems, by: { $0.category.rawValue })
+                .mapValues { $0.count }
             try auditLogger.record(
                 action: .changeOrderUpdated,
                 entityType: .changeOrder,
@@ -586,6 +595,7 @@ public final class ChangeOrderRepository {
                     "revisionNumber": changeOrder.revisionNumber,
                     "fields": ["lineItems"],
                     "lineItemCount": changeOrder.lineItems.count,
+                    "lineItemCategoryCounts": categoryCounts,
                 ],
                 now: now,
                 save: false

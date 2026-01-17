@@ -23,7 +23,7 @@ struct ChameleonApp: App {
 
     var body: some Scene {
         WindowGroup {
-            JobListView()
+            AppRootView()
                 .modelContainer(modelContainer)
         }
     }

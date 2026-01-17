@@ -24,6 +24,15 @@ struct ExportPackageServiceTests {
         let repository = ChangeOrderRepository(modelContext: context)
         let changeOrder = try repository.createChangeOrder(job: job, number: 1, title: "T", details: "D", taxRate: 0.07)
 
+        let lineItem = try repository.addLineItem(
+            changeOrder: changeOrder,
+            name: "Materials",
+            quantity: 1,
+            unitPrice: 10,
+            unit: nil
+        )
+        #expect(lineItem.category == .other)
+
         let documentsBase = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: documentsBase) }
         let storage = try FileStorageManager(baseDirectoryURL: documentsBase)
@@ -68,6 +77,10 @@ struct ExportPackageServiceTests {
         let files = try #require(manifestDict["files"] as? [[String: Any]])
         #expect(files.contains(where: { ($0["relativePath"] as? String) == "audit.json" }))
         #expect(files.contains(where: { ($0["relativePath"] as? String) == "pdfs/CO-0001.pdf" }))
+
+        let changeOrderDict = try #require(manifestDict["changeOrder"] as? [String: Any])
+        let lineItems = try #require(changeOrderDict["lineItems"] as? [[String: Any]])
+        #expect(lineItems.contains(where: { ($0["category"] as? String) == "other" }))
     }
 
     private func isLowercaseHex(_ value: String) -> Bool {

@@ -27,8 +27,27 @@ public final class CompanyProfileRepository {
         return profile
     }
 
+    @discardableResult
+    public func upsertCompanyProfile(
+        companyName: String,
+        defaultTaxRate: Decimal?,
+        defaultTerms: String?,
+        logoPath: String?,
+        now: Date = Date()
+    ) throws -> CompanyProfileModel {
+        let profile = try getOrCreateCompanyProfile()
+        profile.companyName = companyName
+        if let defaultTaxRate {
+            profile.defaultTaxRate = Money.clampTaxRate(defaultTaxRate)
+        }
+        profile.defaultTerms = defaultTerms
+        profile.logoPath = logoPath
+        profile.updatedAt = now
+        try save()
+        return profile
+    }
+
     public func save() throws {
         try modelContext.save()
     }
 }
-

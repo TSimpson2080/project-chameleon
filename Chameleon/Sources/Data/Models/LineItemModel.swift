@@ -12,6 +12,7 @@ public final class LineItemModel {
 
     public var name: String
     public var details: String?
+    public var category: LineItemCategory
     public var quantity: Decimal
     public var unitPrice: Decimal
     public var unit: String?
@@ -22,6 +23,7 @@ public final class LineItemModel {
         changeOrder: ChangeOrderModel? = nil,
         name: String,
         details: String? = nil,
+        category: LineItemCategory = .other,
         quantity: Decimal = 1,
         unitPrice: Decimal = 0,
         unit: String? = nil,
@@ -35,6 +37,7 @@ public final class LineItemModel {
         self.updatedAt = updatedAt ?? createdAt
         self.name = name
         self.details = details
+        self.category = category
         self.quantity = quantity
         self.unitPrice = unitPrice
         self.unit = unit

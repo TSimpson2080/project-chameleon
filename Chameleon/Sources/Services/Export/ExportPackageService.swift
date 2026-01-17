@@ -146,6 +146,23 @@ public final class ExportPackageService {
 
         includedFiles.sort { $0.relativePath < $1.relativePath }
 
+        let sortedLineItems = changeOrder.lineItems.sorted { lhs, rhs in
+            if lhs.sortIndex != rhs.sortIndex { return lhs.sortIndex < rhs.sortIndex }
+            return lhs.createdAt < rhs.createdAt
+        }
+        let manifestLineItems = sortedLineItems.map { item in
+            Manifest.LineItemEntry(
+                id: item.id.uuidString,
+                name: item.name,
+                details: item.details,
+                category: item.category.rawValue,
+                quantity: decimalString(item.quantity),
+                unitPrice: decimalString(item.unitPrice),
+                unit: item.unit,
+                sortIndex: item.sortIndex
+            )
+        }
+
         let manifest = Manifest(
             appVersion: appVersion(),
             buildNumber: buildNumber(),
@@ -155,7 +172,8 @@ public final class ExportPackageService {
                 id: changeOrder.id.uuidString,
                 number: changeOrder.number,
                 revisionNumber: changeOrder.revisionNumber,
-                lockedAt: changeOrder.lockedAt.map(iso8601(_:))
+                lockedAt: changeOrder.lockedAt.map(iso8601(_:)),
+                lineItems: manifestLineItems
             ),
             files: includedFiles.map { Manifest.FileEntry(relativePath: $0.relativePath, sha256: $0.sha256, byteCount: $0.byteCount) }
         )
@@ -228,6 +246,10 @@ public final class ExportPackageService {
         let signatureImage = signaturePath.map { storage.url(forRelativePath: $0) }.flatMap { URL in
             UIImage(contentsOfFile: URL.path)
         }
+        let companyName = company?.companyName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let companyLogoImage = company?.logoPath.flatMap { logoPath in
+            UIImage(contentsOfFile: storage.url(forRelativePath: logoPath).path)
+        }
 
         let breakdown = PricingCalculator.calculate(lineItems: changeOrder.lineItems, taxRate: Money.clampTaxRate(changeOrder.taxRate))
         let sortedLineItems = changeOrder.lineItems.sorted { $0.sortIndex < $1.sortIndex }
@@ -254,7 +276,8 @@ public final class ExportPackageService {
             taxRate: changeOrder.taxRate,
             total: breakdown.total,
             lineItems: pdfLineItems,
-            companyName: company?.companyName,
+            companyName: (companyName?.isEmpty ?? true) ? nil : companyName,
+            companyLogoImage: companyLogoImage,
             jobClientName: job.clientName,
             jobProjectName: job.projectName,
             jobAddress: job.address,
@@ -365,6 +388,10 @@ public final class ExportPackageService {
         Bundle.main.infoDictionary?["CFBundleVersion"] as? String
     }
 
+    private func decimalString(_ value: Decimal) -> String {
+        NSDecimalNumber(decimal: value).stringValue
+    }
+
     private struct IncludedFile {
         let relativePath: String
         let sha256: String
@@ -394,12 +421,24 @@ public final class ExportPackageService {
             let number: Int
             let revisionNumber: Int
             let lockedAt: String?
+            let lineItems: [LineItemEntry]
         }
 
         struct FileEntry: Codable {
             let relativePath: String
             let sha256: String
             let byteCount: Int
+        }
+
+        struct LineItemEntry: Codable {
+            let id: String
+            let name: String
+            let details: String?
+            let category: String
+            let quantity: String
+            let unitPrice: String
+            let unit: String?
+            let sortIndex: Int
         }
     }
 
