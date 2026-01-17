@@ -9,8 +9,14 @@ public struct ChangeOrderDetailView: View {
     @State private var selectedPhotoItems: [PhotosPickerItem] = []
     @State private var isPresentingImageViewer = false
     @State private var viewerImage: UIImage?
-    @State private var isPresentingPDFPreview = false
-    @State private var pdfData: Data?
+
+    private struct PDFPreviewPayload: Identifiable {
+        let id = UUID()
+        let data: Data
+    }
+
+    @State private var pdfPreview: PDFPreviewPayload?
+    @State private var pdfErrorMessage: String?
 
     private let storage: FileStorageManager
     private let pdfGenerator: PDFGenerator
@@ -89,14 +95,18 @@ public struct ChangeOrderDetailView: View {
                 }
             }
         }
-        .sheet(isPresented: $isPresentingPDFPreview) {
+        .sheet(item: $pdfPreview) { payload in
             NavigationStack {
-                if let pdfData {
-                    PDFPreviewScreen(title: "Draft PDF", pdfData: pdfData)
-                } else {
-                    ContentUnavailableView("No PDF", systemImage: "doc", description: Text("Could not generate a preview."))
-                }
+                PDFPreviewScreen(title: "Draft PDF", pdfData: payload.data)
             }
+        }
+        .alert("PDF Error", isPresented: Binding(
+            get: { pdfErrorMessage != nil },
+            set: { if !$0 { pdfErrorMessage = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(pdfErrorMessage ?? "Unknown error")
         }
     }
 
@@ -139,9 +149,9 @@ public struct ChangeOrderDetailView: View {
 
     private func generateDraftPDF() {
         guard let job = changeOrder.job else {
-            print("Draft PDF generation failed: missing job relationship for changeOrder.id=\(changeOrder.id)")
-            pdfData = nil
-            isPresentingPDFPreview = true
+            let message = "Missing job relationship for this change order."
+            print("Draft PDF generation failed: \(message) changeOrder.id=\(changeOrder.id)")
+            pdfErrorMessage = message
             return
         }
 
@@ -156,12 +166,10 @@ public struct ChangeOrderDetailView: View {
             let header = String(bytes: data.prefix(8), encoding: .ascii) ?? "<non-ascii>"
             print("Draft PDF generated: bytes=\(data.count) header=\(header)")
 
-            pdfData = data
-            isPresentingPDFPreview = true
+            pdfPreview = PDFPreviewPayload(data: data)
         } catch {
             print("Draft PDF generation failed: \(error)")
-            pdfData = nil
-            isPresentingPDFPreview = true
+            pdfErrorMessage = "Could not generate draft PDF. \(error)"
         }
     }
 
