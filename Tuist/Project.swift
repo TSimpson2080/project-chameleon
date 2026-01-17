@@ -11,8 +11,8 @@ let project = Project(
       bundleId: "com.tsimpson.chameleon",
       deploymentTarget: .iOS(targetVersion: "17.0", devices: [.iphone]),
       infoPlist: .default,
-      sources: ["Sources/**"],
-      resources: ["Resources/**"],
+      sources: ["Chameleon/Sources/**"],
+      resources: ["Chameleon/Resources/**"],
       dependencies: []
     ),
     Target(
@@ -22,7 +22,7 @@ let project = Project(
       bundleId: "com.tsimpson.chameleonTests",
       deploymentTarget: .iOS(targetVersion: "17.0", devices: [.iphone]),
       infoPlist: .default,
-      sources: ["Tests/Unit/**"],
+      sources: ["Chameleon/Tests/**"],
       dependencies: [.target(name: "Chameleon")]
     ),
     Target(
@@ -32,7 +32,7 @@ let project = Project(
       bundleId: "com.tsimpson.chameleonUITests",
       deploymentTarget: .iOS(targetVersion: "17.0", devices: [.iphone]),
       infoPlist: .default,
-      sources: ["Tests/UI/**"],
+      sources: ["Chameleon/Tests/**"],
       dependencies: [.target(name: "Chameleon")]
     )
   ]
