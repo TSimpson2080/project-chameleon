@@ -42,7 +42,14 @@ public struct JobListView: View {
             .navigationTitle("Jobs")
             .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always))
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    NavigationLink {
+                        SettingsView()
+                    } label: {
+                        Image(systemName: "gearshape")
+                    }
+                    .accessibilityLabel("Settings")
+
                     Button {
                         isPresentingNewJobSheet = true
                     } label: {
