@@ -138,3 +138,5 @@ public final class ChangeOrderModel {
         lockedAt != nil && signedPdfPath != nil && signedPdfHash != nil
     }
 }
+
+extension ChangeOrderModel: Identifiable {}

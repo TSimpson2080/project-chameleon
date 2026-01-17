@@ -18,6 +18,12 @@ public enum NumberingService {
         "CO-" + String(format: "%04d", max(value, 0))
     }
 
+    public static func formatDisplayNumber(number: Int, revisionNumber: Int) -> String {
+        let base = formatChangeOrderNumber(number)
+        guard revisionNumber > 0 else { return base }
+        return "\(base) Rev \(revisionNumber)"
+    }
+
     public static func parseChangeOrderNumber(_ text: String) -> Int? {
         guard text.hasPrefix("CO-") else { return nil }
         let suffix = text.dropFirst(3)
@@ -26,4 +32,3 @@ public enum NumberingService {
         return value >= 1 ? value : nil
     }
 }
-
