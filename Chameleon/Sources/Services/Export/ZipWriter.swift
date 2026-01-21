@@ -128,15 +128,15 @@ private enum CRC32 {
 private extension Data {
     mutating func appendUInt16LE(_ value: UInt16) {
         var v = value.littleEndian
-        Swift.withUnsafeBytes(of: &v) { buffer in
-            append(contentsOf: buffer.bindMemory(to: UInt8.self))
+        Swift.withUnsafeBytes(of: &v) { raw in
+            append(contentsOf: raw)
         }
     }
 
     mutating func appendUInt32LE(_ value: UInt32) {
         var v = value.littleEndian
-        Swift.withUnsafeBytes(of: &v) { buffer in
-            append(contentsOf: buffer.bindMemory(to: UInt8.self))
+        Swift.withUnsafeBytes(of: &v) { raw in
+            append(contentsOf: raw)
         }
     }
 }
