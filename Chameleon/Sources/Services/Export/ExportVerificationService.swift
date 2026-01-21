@@ -1,4 +1,5 @@
 import Foundation
+import zlib
 
 public final class ExportVerificationService {
     public enum VerificationError: LocalizedError {
@@ -167,7 +168,7 @@ enum ZipArchive {
         let entries = try readCentralDirectoryEntries(zipData: data)
 
         for entry in entries {
-            guard entry.compressionMethod == 0 else { throw ZipError.unsupportedCompression }
+            guard entry.compressionMethod == 0 || entry.compressionMethod == 8 else { throw ZipError.unsupportedCompression }
             let normalizedName = entry.fileName.replacingOccurrences(of: "\\", with: "/")
             guard !normalizedName.isEmpty else { throw ZipError.invalidEntryName }
             guard !normalizedName.contains("..") else { throw ZipError.invalidPathTraversal }
@@ -178,7 +179,13 @@ enum ZipArchive {
                 try fileManager.createDirectory(at: parent, withIntermediateDirectories: true)
             }
 
-            let fileData = try readLocalFileData(zipData: data, localHeaderOffset: Int(entry.localHeaderOffset))
+            let fileData = try readLocalFileData(
+                zipData: data,
+                localHeaderOffset: Int(entry.localHeaderOffset),
+                compressionMethod: entry.compressionMethod,
+                compressedSize: entry.compressedSize,
+                uncompressedSize: entry.uncompressedSize
+            )
             try fileData.write(to: destinationURL, options: [.atomic])
         }
     }
@@ -242,22 +249,105 @@ enum ZipArchive {
         return entries
     }
 
-    private static func readLocalFileData(zipData: Data, localHeaderOffset: Int) throws -> Data {
+    private static func readLocalFileData(
+        zipData: Data,
+        localHeaderOffset: Int,
+        compressionMethod: UInt16,
+        compressedSize: UInt32,
+        uncompressedSize: UInt32
+    ) throws -> Data {
         let localSignature: UInt32 = 0x04034b50
         guard localHeaderOffset + 30 <= zipData.count else { throw ZipError.invalidZip }
         guard zipData.readUInt32LE(at: localHeaderOffset) == localSignature else { throw ZipError.invalidZip }
 
-        let compression = zipData.readUInt16LE(at: localHeaderOffset + 8)
-        guard compression == 0 else { throw ZipError.unsupportedCompression }
+        let headerCompression = zipData.readUInt16LE(at: localHeaderOffset + 8)
+        guard headerCompression == compressionMethod else { throw ZipError.invalidZip }
+        guard compressionMethod == 0 || compressionMethod == 8 else { throw ZipError.unsupportedCompression }
 
-        let compressedSize = zipData.readUInt32LE(at: localHeaderOffset + 18)
+        let headerCompressedSize = zipData.readUInt32LE(at: localHeaderOffset + 18)
         let fileNameLength = Int(zipData.readUInt16LE(at: localHeaderOffset + 26))
         let extraLength = Int(zipData.readUInt16LE(at: localHeaderOffset + 28))
 
         let dataStart = localHeaderOffset + 30 + fileNameLength + extraLength
-        let dataEnd = dataStart + Int(compressedSize)
+        let effectiveCompressedSize = headerCompressedSize != 0 ? headerCompressedSize : compressedSize
+        let dataEnd = dataStart + Int(effectiveCompressedSize)
         guard dataEnd <= zipData.count else { throw ZipError.invalidZip }
-        return zipData[dataStart..<dataEnd]
+
+        let payload = zipData[dataStart..<dataEnd]
+        switch compressionMethod {
+        case 0:
+            return payload
+        case 8:
+            return try inflateRawDeflate(payload, expectedUncompressedSize: uncompressedSize)
+        default:
+            throw ZipError.unsupportedCompression
+        }
+    }
+
+    private static func inflateRawDeflate(_ data: Data, expectedUncompressedSize: UInt32) throws -> Data {
+        guard data.count <= Int(UInt32.max) else { throw ZipError.invalidZip }
+
+        var stream = z_stream()
+        stream.zalloc = nil
+        stream.zfree = nil
+        stream.opaque = nil
+
+        let windowBits = -MAX_WBITS // raw DEFLATE (no zlib/gzip header)
+        let initResult = inflateInit2_(&stream, windowBits, ZLIB_VERSION, Int32(MemoryLayout<z_stream>.size))
+        guard initResult == Z_OK else { throw ZipError.invalidZip }
+        defer { inflateEnd(&stream) }
+
+        let expected = Int(expectedUncompressedSize)
+        var output = Data()
+        if expected > 0 {
+            output.reserveCapacity(expected)
+        }
+
+        return try data.withUnsafeBytes { rawBuffer in
+            guard let baseAddress = rawBuffer.bindMemory(to: Bytef.self).baseAddress else {
+                return Data()
+            }
+
+            stream.next_in = UnsafeMutablePointer<Bytef>(mutating: baseAddress)
+            stream.avail_in = uInt(data.count)
+
+            let chunkSize = max(16 * 1024, expected > 0 ? min(64 * 1024, expected) : 16 * 1024)
+            var temp = [UInt8](repeating: 0, count: chunkSize)
+
+            while true {
+                let resultAndProduced = try temp.withUnsafeMutableBytes { outBuffer -> (result: Int32, produced: Int) in
+                    guard let outBase = outBuffer.bindMemory(to: Bytef.self).baseAddress else {
+                        throw ZipError.invalidZip
+                    }
+
+                    stream.next_out = outBase
+                    stream.avail_out = uInt(outBuffer.count)
+
+                    let result = inflate(&stream, Z_NO_FLUSH)
+                    if result != Z_OK && result != Z_STREAM_END {
+                        throw ZipError.invalidZip
+                    }
+
+                    let produced = outBuffer.count - Int(stream.avail_out)
+                    return (result: result, produced: produced)
+                }
+
+                if resultAndProduced.produced > 0 {
+                    output.append(contentsOf: temp[0..<resultAndProduced.produced])
+                }
+
+                if resultAndProduced.result == Z_STREAM_END { break }
+                if stream.avail_in == 0 && resultAndProduced.produced == 0 {
+                    // No more input and no progress.
+                    break
+                }
+            }
+
+            if expected > 0, output.count != expected {
+                throw ZipError.invalidZip
+            }
+            return output
+        }
     }
 }
 
