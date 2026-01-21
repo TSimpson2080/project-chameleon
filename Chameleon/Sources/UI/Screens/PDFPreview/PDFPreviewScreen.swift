@@ -47,32 +47,35 @@ public struct PDFPreviewScreen: View {
         }
     }
 
-    private func share() {
-        let header = String(data: pdfData.prefix(8), encoding: .ascii) ?? "<non-ascii>"
-        print("PDFPreviewScreen Share tapped. data.count=\(pdfData.count) header=\(header)")
+	    private func share() {
+	        let header = String(data: pdfData.prefix(8), encoding: .ascii) ?? "<non-ascii>"
+	        print("PDFPreviewScreen Share tapped. data.count=\(pdfData.count) header=\(header)")
 
-        guard pdfData.count >= 1000, header.hasPrefix("%PDF-") else {
-            shareErrorMessage = "Invalid PDF data (count=\(pdfData.count), header=\(header))."
-            return
-        }
+	        guard pdfData.count >= 1000, header.hasPrefix("%PDF-") else {
+	            shareErrorMessage = "Invalid PDF data (count=\(pdfData.count), header=\(header))."
+	            return
+	        }
 
-        guard let url = writeTempPDF() else {
-            shareErrorMessage = "Could not write a temporary PDF file for sharing."
-            return
-        }
+	        let shareURL = writeTempPDF()
+	        print("PDF share temp URL: \(shareURL?.path ?? "<nil>")")
+	        guard let url = shareURL else {
+	            shareErrorMessage = "Could not write a temporary PDF file for sharing."
+	            return
+	        }
 
-        print("PDFPreviewScreen temp file: \(url.path)")
-        sharePayload = SharePayload(url: url)
-    }
+	        print("PDFPreviewScreen temp file: \(url.path)")
+	        sharePayload = SharePayload(url: url)
+	    }
 
-    private func writeTempPDF() -> URL? {
-        let directory = FileManager.default.temporaryDirectory
-        let url = directory.appendingPathComponent("Chameleon-\(UUID().uuidString).pdf")
+	    private func writeTempPDF() -> URL? {
+	        let directory = FileManager.default.temporaryDirectory
+	        let url = directory.appendingPathComponent("Chameleon-\(UUID().uuidString).pdf")
+	        print("Writing temp PDF to: \(url.path) bytes=\(pdfData.count) header=\(String(bytes: pdfData.prefix(8), encoding: .ascii) ?? "<non-ascii>")")
 
-        do {
-            try pdfData.write(to: url, options: [.atomic])
-            return url
-        } catch {
+	        do {
+	            try pdfData.write(to: url, options: [.atomic])
+	            return url
+	        } catch {
             print("PDFPreviewScreen writeTempPDF error: \(error)")
             return nil
         }
@@ -99,4 +102,3 @@ private struct PDFKitView: UIViewRepresentable {
         uiView.document = document
     }
 }
-
