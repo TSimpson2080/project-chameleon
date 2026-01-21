@@ -68,6 +68,11 @@ public struct ExportsListView: View {
         }
         .navigationTitle("Verified Packages")
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            Task { @MainActor in
+                HangDiagnostics.shared.setCurrentScreen("VerifiedPackages")
+            }
+        }
         .sheet(item: $sharePayload) { payload in
             ShareSheet(activityItems: [payload.url])
         }
@@ -143,12 +148,7 @@ public struct ExportsListView: View {
     }
 
     private func exportZipURL(for export: ExportPackageModel) -> URL? {
-        guard let appSupport = try? FileManager.default.url(
-            for: .applicationSupportDirectory,
-            in: .userDomainMask,
-            appropriateFor: nil,
-            create: true
-        ) else { return nil }
+        guard let appSupport = try? ApplicationSupportLocator.baseURL() else { return nil }
         return appSupport.appendingPathComponent(export.zipPath)
     }
 

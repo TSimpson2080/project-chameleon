@@ -56,6 +56,11 @@ public struct JobDetailView: View {
         }
         .navigationTitle(job.clientName)
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            Task { @MainActor in
+                HangDiagnostics.shared.setCurrentScreen("JobDetail")
+            }
+        }
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
                 NavigationLink {

@@ -120,6 +120,11 @@ public struct VerifyExportScreen: View {
         }
         .navigationTitle("Verify Package")
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            Task { @MainActor in
+                HangDiagnostics.shared.setCurrentScreen("VerifyPackage")
+            }
+        }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button("Done") { dismiss() }
@@ -163,12 +168,17 @@ public struct VerifyExportScreen: View {
             do {
                 let data = try Data(contentsOf: url)
                 let header = String(data: data.prefix(8), encoding: .ascii) ?? "<non-ascii>"
-                print("VerifyPackage verifying: \(url.path) bytes=\(data.count) header=\(header)")
+                if HangDiagnostics.isEnabled() {
+                    print("VerifyPackage verifying: \(url.path) bytes=\(data.count) header=\(header)")
+                }
                 if data.isEmpty {
                     throw CocoaError(.fileReadUnknown)
                 }
                 let entries = (try? listZipEntryNames(data)) ?? []
-                print("VerifyPackage entries: \(entries)")
+                if HangDiagnostics.isEnabled() {
+                    print("VerifyPackage entries: \(entries)")
+                }
+                AppLog.shared.log("VerifyPackage start bytes=\(data.count) header=\(header)")
 
                 let service = ExportVerificationService()
                 let report = try await service.verifyExportZip(at: url)
@@ -211,8 +221,11 @@ public struct VerifyExportScreen: View {
 
             let tmpData = try Data(contentsOf: tmp)
             let header = String(data: tmpData.prefix(8), encoding: .ascii) ?? "<non-ascii>"
-            print("VerifyPackage selected: \(selected.path)")
-            print("VerifyPackage copied to: \(tmp.path) bytes=\(tmpData.count) header=\(header)")
+            if HangDiagnostics.isEnabled() {
+                print("VerifyPackage selected: \(selected.path)")
+                print("VerifyPackage copied to: \(tmp.path) bytes=\(tmpData.count) header=\(header)")
+            }
+            AppLog.shared.log("VerifyPackage imported zip bytes=\(tmpData.count) header=\(header)")
 
             if tmpData.isEmpty {
                 errorMessage = "Could not read ZIP. If it is in iCloud, wait for download to finish and try again."

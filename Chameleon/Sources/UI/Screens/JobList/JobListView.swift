@@ -40,6 +40,11 @@ public struct JobListView: View {
                 }
             }
             .navigationTitle("Jobs")
+            .onAppear {
+                Task { @MainActor in
+                    HangDiagnostics.shared.setCurrentScreen("JobList")
+                }
+            }
             .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always))
             .toolbar {
                 ToolbarItemGroup(placement: .topBarTrailing) {

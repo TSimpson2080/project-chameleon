@@ -48,12 +48,7 @@ public final class ExportPackageService {
                 try fileManager.createDirectory(at: applicationSupportURL, withIntermediateDirectories: true)
             }
         } else {
-            self.applicationSupportURL = try fileManager.url(
-                for: .applicationSupportDirectory,
-                in: .userDomainMask,
-                appropriateFor: nil,
-                create: true
-            )
+            self.applicationSupportURL = try ApplicationSupportLocator.baseURL(fileManager: fileManager)
         }
     }
 
@@ -69,8 +64,11 @@ public final class ExportPackageService {
 
         let exportFolderRelativePath = "Exports/\(exportId.uuidString)"
         let exportFolderURL = applicationSupportURL.appendingPathComponent(exportFolderRelativePath, isDirectory: true)
-        print("ExportPackageService Application Support: \(applicationSupportURL.path)")
-        print("ExportPackageService export folder: \(exportFolderURL.path)")
+        if HangDiagnostics.isEnabled() {
+            print("ExportPackageService Application Support: \(applicationSupportURL.path)")
+            print("ExportPackageService export folder: \(exportFolderURL.path)")
+        }
+        AppLog.shared.log("Package start id=\(exportId) folder=\(exportFolderRelativePath)")
         try fileManager.createDirectory(at: exportFolderURL, withIntermediateDirectories: true)
 
         let workingURL = exportFolderURL.appendingPathComponent("Working", isDirectory: true)
@@ -195,9 +193,12 @@ public final class ExportPackageService {
 
         let manifestURL = exportFolderURL.appendingPathComponent("manifest.json")
         try manifestData.write(to: manifestURL, options: [.atomic])
+        AppLog.shared.log("Package wrote manifest: \(manifestURL.lastPathComponent) sha256=\(manifestSHA256.prefix(10))")
 
         let zipURL = exportFolderURL.appendingPathComponent(zipFileName)
-        print("ExportPackageService zip URL: \(zipURL.path)")
+        if HangDiagnostics.isEnabled() {
+            print("ExportPackageService zip URL: \(zipURL.path)")
+        }
         if fileManager.fileExists(atPath: zipURL.path) {
             try fileManager.removeItem(at: zipURL)
         }
@@ -210,6 +211,7 @@ public final class ExportPackageService {
 
         let zipData = try Data(contentsOf: zipURL)
         let zipSHA256 = SHA256Hasher.sha256Hex(data: zipData)
+        AppLog.shared.log("Package wrote zip: \(zipURL.lastPathComponent) bytes=\(zipData.count) sha256=\(zipSHA256.prefix(10))")
 
         let model = ExportPackageModel(
             id: exportId,

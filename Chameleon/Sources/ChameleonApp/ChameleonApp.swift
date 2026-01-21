@@ -19,6 +19,8 @@ struct ChameleonApp: App {
         } catch {
             fatalError("Failed to create SwiftData ModelContainer: \(error)")
         }
+
+        HangDiagnostics.shared.startIfEnabled()
     }
 
     var body: some Scene {

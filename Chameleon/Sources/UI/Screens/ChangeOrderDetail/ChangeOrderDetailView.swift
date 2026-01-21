@@ -51,6 +51,7 @@ public struct ChangeOrderDetailView: View {
     @State private var verifyExportError: String?
 
     @State private var exportsListPayload: ExportsListPayload?
+    @State private var latestPackageZipURL: URL?
 
     @State private var didLoadDraftFields = false
     @State private var titleText: String = ""
@@ -71,6 +72,188 @@ public struct ChangeOrderDetailView: View {
     }
 
     public var body: some View {
+        // SwiftUI type-checker can time out on large modifier chains.
+        // Build the view in small steps, erasing type growth with `AnyView`.
+        var view: AnyView = AnyView(formBody)
+
+        view = AnyView(
+            view
+                .navigationTitle("Change Order")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar { trailingToolbarContent }
+        )
+
+        view = AnyView(
+            view.onAppear {
+                Task { @MainActor in
+                    HangDiagnostics.shared.setCurrentScreen("ChangeOrderDetail")
+                }
+            }
+        )
+
+        view = AnyView(
+            view.sheet(item: $pdfPreview) { payload in
+                NavigationStack {
+                    PDFPreviewScreen(title: changeOrder.isLocked ? "Signed PDF" : "Draft PDF", pdfData: payload.data)
+                }
+            }
+        )
+
+        view = AnyView(
+            view.sheet(item: $createdRevision) { co in
+                NavigationStack {
+                    ChangeOrderDetailView(changeOrder: co)
+                }
+            }
+        )
+
+        view = AnyView(view.sheet(item: $exportSharePayload) { payload in ShareSheet(activityItems: [payload.url]) })
+
+        view = AnyView(
+            view.sheet(item: $verifyExportPayload) { payload in
+                NavigationStack {
+                    VerifyExportScreen(initialZipURL: payload.initialZipURL)
+                }
+            }
+        )
+
+        view = AnyView(
+            view.sheet(item: $exportsListPayload) { payload in
+                NavigationStack {
+                    ExportsListView(changeOrderId: payload.changeOrderId)
+                }
+            }
+        )
+
+        view = AnyView(
+            view.sheet(item: $lineItemEditorPayload) { payload in
+                LineItemEditorSheet(
+                    title: payload.mode.isAdd ? "Add Line Item" : "Edit Line Item",
+                    initial: payload.mode.initialDraft,
+                    onSave: { draft in
+                        try saveLineItem(payload: payload, draft: draft)
+                    }
+                )
+            }
+        )
+
+        view = AnyView(
+            view.alert("PDF Error", isPresented: Binding(
+                get: { pdfErrorMessage != nil },
+                set: { if !$0 { pdfErrorMessage = nil } }
+            )) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(pdfErrorMessage ?? "Unknown error")
+            }
+        )
+
+        view = AnyView(
+            view.alert("Create Revision Failed", isPresented: Binding(
+                get: { revisionError != nil },
+                set: { if !$0 { revisionError = nil } }
+            )) {
+                Button("OK", role: .cancel) { revisionError = nil }
+            } message: {
+                Text(revisionError ?? "")
+            }
+        )
+
+        view = AnyView(
+            view.alert("Package Failed", isPresented: Binding(
+                get: { exportError != nil },
+                set: { if !$0 { exportError = nil } }
+            )) {
+                Button("OK", role: .cancel) { exportError = nil }
+            } message: {
+                Text(exportError ?? "")
+            }
+        )
+
+        view = AnyView(
+            view.alert("Verify Package Failed", isPresented: Binding(
+                get: { verifyExportError != nil },
+                set: { if !$0 { verifyExportError = nil } }
+            )) {
+                Button("OK", role: .cancel) { verifyExportError = nil }
+            } message: {
+                Text(verifyExportError ?? "")
+            }
+        )
+
+        view = AnyView(
+            view.alert("Line Item Error", isPresented: Binding(
+                get: { lineItemError != nil },
+                set: { if !$0 { lineItemError = nil } }
+            )) {
+                Button("OK", role: .cancel) { lineItemError = nil }
+            } message: {
+                Text(lineItemError ?? "")
+            }
+        )
+
+        view = AnyView(
+            view.sheet(isPresented: $isPresentingSignatureCapture) {
+                SignatureCaptureView(title: "Client Signature", initialName: changeOrder.clientSignatureName ?? "") { name, image in
+                    let fileStorage = try FileStorageManager()
+                    let path = try fileStorage.saveSignaturePNG(image)
+                    let repository = ChangeOrderRepository(modelContext: modelContext)
+                    try repository.captureClientSignature(for: changeOrder, name: name, signatureFilePath: path)
+                }
+            }
+        )
+
+        view = AnyView(
+            view.alert("Lock Error", isPresented: $isPresentingLockError) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(lockErrorMessage ?? "Unknown error")
+            }
+        )
+
+        view = AnyView(
+            view
+                .onChange(of: selectedPhotos) { _, newItems in
+                    guard !newItems.isEmpty else { return }
+                    addSelectedPhotos(newItems)
+                }
+                .onChange(of: titleText) { _, _ in persistDraftFields() }
+                .onChange(of: detailsText) { _, _ in persistDraftFields() }
+                .onAppear {
+                    guard !didLoadDraftFields else { return }
+                    titleText = changeOrder.title
+                    detailsText = changeOrder.details
+                    didLoadDraftFields = true
+                }
+        )
+
+        view = AnyView(
+            view.safeAreaInset(edge: .bottom) {
+                Color.clear.frame(height: 80)
+            }
+        )
+
+        view = AnyView(
+            view.overlay {
+                if isExportingPackage {
+                    ZStack {
+                        Color.black.opacity(0.1)
+                            .ignoresSafeArea()
+                        ProgressView("Creating Package…")
+                            .padding()
+                            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
+                    }
+                }
+            }
+        )
+
+        view = AnyView(view.task { loadLatestPackageZipURL() })
+
+        return view
+    }
+
+    @ViewBuilder
+    private var formBody: some View {
         Form {
             changeOrderSection
             detailsSection
@@ -80,185 +263,90 @@ public struct ChangeOrderDetailView: View {
             actionsSection
             if changeOrder.isLocked { revisionsSection }
         }
-        .navigationTitle("Change Order")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Menu {
-                    Button("Preview PDF") { generateDraftPDF() }
-                    Button("Verify Package ZIP…") {
-                        verifyExportPayload = VerifyExportPayload(initialZipURL: nil)
-                    }
-                    Button("Verified Packages") {
-                        exportsListPayload = ExportsListPayload(changeOrderId: changeOrder.id)
-                    }
-                    if changeOrder.isLocked {
-                        Button("Create Revision") {
-                            Task { @MainActor in
-                                print("CreateRevision tapped locked=\(changeOrder.isLocked)")
-                                guard !isCreatingRevision else { return }
-                                isCreatingRevision = true
-                                defer { isCreatingRevision = false }
+    }
 
-                                do {
-                                    let repository = ChangeOrderRepository(modelContext: modelContext)
-                                    let newCO = try repository.createRevision(from: changeOrder)
-                                    print("CreateRevision created id=\(newCO.id) rev=\(newCO.revisionNumber)")
-                                    createdRevision = newCO
-                                } catch {
-                                    print("CreateRevision failed: \(error)")
-                                    revisionError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-                                }
-                            }
-                        }
-                        .disabled(isCreatingRevision)
-
-                        Button("Create Verified Package") {
-                            Task { @MainActor in
-                                print("Bundle ID at package creation: \(Bundle.main.bundleIdentifier ?? "<nil>")")
-                                guard !isExportingPackage else { return }
-                                isExportingPackage = true
-                                defer { isExportingPackage = false }
-
-                                do {
-                                    guard let job = changeOrder.job else { throw ExportPackageService.ExportError.missingJob }
-                                    let service = try ExportPackageService(modelContext: modelContext)
-                                    let export = try service.exportChangeOrderPackage(changeOrder: changeOrder, job: job)
-                                    let zipURL = service.urlForExportRelativePath(export.zipPath)
-                                    print("Verified package ZIP: \(zipURL.path)")
-                                    assert(FileManager.default.fileExists(atPath: zipURL.path), "Expected package zip to exist at \(zipURL.path)")
-                                    exportSharePayload = ExportSharePayload(url: zipURL)
-                                } catch {
-                                    exportError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-                                }
-                            }
-                        }
-                        .disabled(isExportingPackage)
-
-                        if let url = latestExportZipURL() {
-                            Button("Verify Last Package") {
-                                if FileManager.default.fileExists(atPath: url.path) {
-                                    verifyExportPayload = VerifyExportPayload(initialZipURL: url)
-                                } else {
-                                    verifyExportError = "Package ZIP not found at stored path."
-                                }
-                            }
-                        }
-                    }
-                } label: {
-                    Image(systemName: "ellipsis.circle")
+    @ToolbarContentBuilder
+    private var trailingToolbarContent: some ToolbarContent {
+        ToolbarItem(placement: .topBarTrailing) {
+            Menu {
+                Button("Preview PDF") { generateDraftPDF() }
+                Button("Verify Package ZIP…") {
+                    verifyExportPayload = VerifyExportPayload(initialZipURL: nil)
                 }
-                .accessibilityLabel("More")
-            }
-        }
-        .sheet(item: $pdfPreview) { payload in
-            NavigationStack {
-                PDFPreviewScreen(title: changeOrder.isLocked ? "Signed PDF" : "Draft PDF", pdfData: payload.data)
-            }
-        }
-        .sheet(item: $createdRevision) { co in
-            NavigationStack {
-                ChangeOrderDetailView(changeOrder: co)
-            }
-        }
-        .sheet(item: $exportSharePayload) { payload in
-            ShareSheet(activityItems: [payload.url])
-        }
-        .sheet(item: $verifyExportPayload) { payload in
-            NavigationStack {
-                VerifyExportScreen(initialZipURL: payload.initialZipURL)
-            }
-        }
-        .sheet(item: $exportsListPayload) { payload in
-            NavigationStack {
-                ExportsListView(changeOrderId: payload.changeOrderId)
-            }
-        }
-        .sheet(item: $lineItemEditorPayload) { payload in
-            LineItemEditorSheet(
-                title: payload.mode.isAdd ? "Add Line Item" : "Edit Line Item",
-                initial: payload.mode.initialDraft,
-                onSave: { draft in
-                    try saveLineItem(payload: payload, draft: draft)
+                Button("Verified Packages") {
+                    exportsListPayload = ExportsListPayload(changeOrderId: changeOrder.id)
                 }
-            )
+                if changeOrder.isLocked {
+                    createRevisionButton
+                    createPackageButton
+                    verifyLastPackageButton
+                }
+            } label: {
+                Image(systemName: "ellipsis.circle")
+            }
+            .accessibilityLabel("More")
         }
-        .alert("PDF Error", isPresented: Binding(
-            get: { pdfErrorMessage != nil },
-            set: { if !$0 { pdfErrorMessage = nil } }
-        )) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(pdfErrorMessage ?? "Unknown error")
-        }
-        .alert("Create Revision Failed", isPresented: Binding(
-            get: { revisionError != nil },
-            set: { if !$0 { revisionError = nil } }
-        )) {
-            Button("OK", role: .cancel) { revisionError = nil }
-        } message: {
-            Text(revisionError ?? "")
-        }
-        .alert("Package Failed", isPresented: Binding(
-            get: { exportError != nil },
-            set: { if !$0 { exportError = nil } }
-        )) {
-            Button("OK", role: .cancel) { exportError = nil }
-        } message: {
-            Text(exportError ?? "")
-        }
-        .alert("Verify Package Failed", isPresented: Binding(
-            get: { verifyExportError != nil },
-            set: { if !$0 { verifyExportError = nil } }
-        )) {
-            Button("OK", role: .cancel) { verifyExportError = nil }
-        } message: {
-            Text(verifyExportError ?? "")
-        }
-        .alert("Line Item Error", isPresented: Binding(
-            get: { lineItemError != nil },
-            set: { if !$0 { lineItemError = nil } }
-        )) {
-            Button("OK", role: .cancel) { lineItemError = nil }
-        } message: {
-            Text(lineItemError ?? "")
-        }
-        .sheet(isPresented: $isPresentingSignatureCapture) {
-            SignatureCaptureView(title: "Client Signature", initialName: changeOrder.clientSignatureName ?? "") { name, image in
-                let fileStorage = try FileStorageManager()
-                let path = try fileStorage.saveSignaturePNG(image)
-                let repository = ChangeOrderRepository(modelContext: modelContext)
-                try repository.captureClientSignature(for: changeOrder, name: name, signatureFilePath: path)
+    }
+
+    private var createRevisionButton: some View {
+        Button("Create Revision") {
+            Task { @MainActor in
+                print("CreateRevision tapped locked=\(changeOrder.isLocked)")
+                guard !isCreatingRevision else { return }
+                isCreatingRevision = true
+                defer { isCreatingRevision = false }
+
+                do {
+                    let repository = ChangeOrderRepository(modelContext: modelContext)
+                    let newCO = try repository.createRevision(from: changeOrder)
+                    print("CreateRevision created id=\(newCO.id) rev=\(newCO.revisionNumber)")
+                    createdRevision = newCO
+                } catch {
+                    print("CreateRevision failed: \(error)")
+                    revisionError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                }
             }
         }
-        .alert("Lock Error", isPresented: $isPresentingLockError) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(lockErrorMessage ?? "Unknown error")
+        .disabled(isCreatingRevision)
+    }
+
+    private var createPackageButton: some View {
+        Button("Create Verified Package") {
+            Task { @MainActor in
+                if HangDiagnostics.isEnabled() {
+                    print("Bundle ID at package creation: \(Bundle.main.bundleIdentifier ?? "<nil>")")
+                }
+                guard !isExportingPackage else { return }
+                isExportingPackage = true
+                defer { isExportingPackage = false }
+
+                do {
+                    guard let job = changeOrder.job else { throw ExportPackageService.ExportError.missingJob }
+                    let service = try ExportPackageService(modelContext: modelContext)
+                    let export = try service.exportChangeOrderPackage(changeOrder: changeOrder, job: job)
+                    let zipURL = service.urlForExportRelativePath(export.zipPath)
+                    if HangDiagnostics.isEnabled() {
+                        print("Verified package ZIP: \(zipURL.path)")
+                    }
+                    assert(FileManager.default.fileExists(atPath: zipURL.path), "Expected package zip to exist at \(zipURL.path)")
+                    latestPackageZipURL = zipURL
+                    exportSharePayload = ExportSharePayload(url: zipURL)
+                } catch {
+                    exportError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                }
+            }
         }
-        .onChange(of: selectedPhotos) { _, newItems in
-            guard !newItems.isEmpty else { return }
-            addSelectedPhotos(newItems)
-        }
-        .onChange(of: titleText) { _, _ in persistDraftFields() }
-        .onChange(of: detailsText) { _, _ in persistDraftFields() }
-        .onAppear {
-            guard !didLoadDraftFields else { return }
-            titleText = changeOrder.title
-            detailsText = changeOrder.details
-            didLoadDraftFields = true
-        }
-        .safeAreaInset(edge: .bottom) {
-            Color.clear.frame(height: 80)
-        }
-        .overlay {
-            if isExportingPackage {
-                ZStack {
-                    Color.black.opacity(0.1)
-                        .ignoresSafeArea()
-                    ProgressView("Creating Package…")
-                        .padding()
-                        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
+        .disabled(isExportingPackage)
+    }
+
+    @ViewBuilder
+    private var verifyLastPackageButton: some View {
+        if let url = latestPackageZipURL {
+            Button("Verify Last Package") {
+                if FileManager.default.fileExists(atPath: url.path) {
+                    verifyExportPayload = VerifyExportPayload(initialZipURL: url)
+                } else {
+                    verifyExportError = "Package ZIP not found at stored path."
                 }
             }
         }
@@ -601,18 +689,12 @@ public struct ChangeOrderDetailView: View {
         return (try? modelContext.fetch(descriptor).first)
     }
 
-    private func latestExportZipURL() -> URL? {
-        guard let export = fetchLatestExportPackage() else { return nil }
-        guard let appSupport = try? FileManager.default.url(
-            for: .applicationSupportDirectory,
-            in: .userDomainMask,
-            appropriateFor: nil,
-            create: true
-        ) else { return nil }
-        return appSupport.appendingPathComponent(export.zipPath)
+    private func loadLatestPackageZipURL() {
+        guard latestPackageZipURL == nil else { return }
+        latestPackageZipURL = resolveLatestPackageZipURL()
     }
 
-    private func fetchLatestExportPackage() -> ExportPackageModel? {
+    private func resolveLatestPackageZipURL() -> URL? {
         let changeOrderId = changeOrder.id
         var descriptor = FetchDescriptor<ExportPackageModel>(
             predicate: #Predicate<ExportPackageModel> { model in
@@ -621,7 +703,9 @@ public struct ChangeOrderDetailView: View {
             sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
         )
         descriptor.fetchLimit = 1
-        return try? modelContext.fetch(descriptor).first
+        guard let export = try? modelContext.fetch(descriptor).first else { return nil }
+        guard let appSupport = try? ApplicationSupportLocator.baseURL() else { return nil }
+        return appSupport.appendingPathComponent(export.zipPath)
     }
 
     private func formatCurrency(_ value: Decimal) -> String {
