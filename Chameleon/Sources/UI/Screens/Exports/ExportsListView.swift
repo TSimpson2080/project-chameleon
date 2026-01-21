@@ -29,8 +29,11 @@ public struct ExportsListView: View {
                 sort: [SortDescriptor(\.createdAt, order: .reverse)]
             )
         case .changeOrder(let changeOrderId):
+            let target: UUID? = changeOrderId
             _exports = Query(
-                filter: #Predicate<ExportPackageModel> { model in model.changeOrderId == changeOrderId },
+                filter: #Predicate<ExportPackageModel> { model in
+                    model.changeOrderId == target
+                },
                 sort: [SortDescriptor(\.createdAt, order: .reverse)]
             )
         }
