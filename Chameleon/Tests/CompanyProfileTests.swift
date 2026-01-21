@@ -27,6 +27,7 @@ struct CompanyProfileTests {
             _ = try repository.upsertCompanyProfile(
                 companyName: "Acme Builders",
                 defaultTaxRate: expectedSevenPercent,
+                clearDefaultTaxRate: false,
                 defaultTerms: "Net 15",
                 logoPath: nil,
                 now: Date(timeIntervalSince1970: 1_700_000_000)
@@ -45,6 +46,7 @@ struct CompanyProfileTests {
             _ = try repository.upsertCompanyProfile(
                 companyName: "Acme Builders",
                 defaultTaxRate: nil,
+                clearDefaultTaxRate: false,
                 defaultTerms: nil,
                 logoPath: nil,
                 now: Date(timeIntervalSince1970: 1_700_000_100)
@@ -61,6 +63,7 @@ struct CompanyProfileTests {
             _ = try repository.upsertCompanyProfile(
                 companyName: "Acme Builders",
                 defaultTaxRate: 2.0,
+                clearDefaultTaxRate: false,
                 defaultTerms: nil,
                 logoPath: nil
             )
@@ -76,6 +79,7 @@ struct CompanyProfileTests {
             _ = try repository.upsertCompanyProfile(
                 companyName: "Acme Builders",
                 defaultTaxRate: -1,
+                clearDefaultTaxRate: false,
                 defaultTerms: nil,
                 logoPath: nil
             )
@@ -109,5 +113,22 @@ struct CompanyProfileTests {
 
         try storage.deleteLogo(atRelativePath: relativePath)
         #expect(!storage.fileExists(atRelativePath: relativePath))
+    }
+
+    @Test func updatingTaxRateToNilPersistsNil() throws {
+        let expected = try #require(Decimal(string: "0.0825", locale: Locale(identifier: "en_US_POSIX")))
+
+        let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: CompanyProfileModel.self, configurations: configuration)
+        let context = ModelContext(container)
+        let repository = CompanyProfileRepository(modelContext: context)
+
+        _ = try repository.upsertCompanyProfile(companyName: "Test Co", defaultTaxRate: expected, clearDefaultTaxRate: false, defaultTerms: nil, logoPath: nil)
+        let saved = try #require(try repository.fetchCompanyProfile())
+        #expect(saved.defaultTaxRate == expected)
+
+        _ = try repository.upsertCompanyProfile(companyName: "Test Co", defaultTaxRate: nil, clearDefaultTaxRate: true, defaultTerms: nil, logoPath: nil)
+        let updated = try #require(try repository.fetchCompanyProfile())
+        #expect(updated.defaultTaxRate == nil)
     }
 }

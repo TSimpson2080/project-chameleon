@@ -31,13 +31,16 @@ public final class CompanyProfileRepository {
     public func upsertCompanyProfile(
         companyName: String,
         defaultTaxRate: Decimal?,
+        clearDefaultTaxRate: Bool = false,
         defaultTerms: String?,
         logoPath: String?,
         now: Date = Date()
     ) throws -> CompanyProfileModel {
         let profile = try getOrCreateCompanyProfile()
         profile.companyName = companyName
-        if let defaultTaxRate {
+        if clearDefaultTaxRate {
+            profile.defaultTaxRate = nil
+        } else if let defaultTaxRate {
             profile.defaultTaxRate = Money.clampTaxRate(defaultTaxRate)
         }
         profile.defaultTerms = defaultTerms

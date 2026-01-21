@@ -319,6 +319,7 @@ public struct OnboardingFlowView: View {
             _ = try repository.upsertCompanyProfile(
                 companyName: companyNameTrimmed,
                 defaultTaxRate: taxRate,
+                clearDefaultTaxRate: false,
                 defaultTerms: defaultTermsTrimmed.isEmpty ? nil : defaultTermsTrimmed,
                 logoPath: logoPath
             )

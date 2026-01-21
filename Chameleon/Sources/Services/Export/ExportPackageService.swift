@@ -69,6 +69,8 @@ public final class ExportPackageService {
 
         let exportFolderRelativePath = "Exports/\(exportId.uuidString)"
         let exportFolderURL = applicationSupportURL.appendingPathComponent(exportFolderRelativePath, isDirectory: true)
+        print("ExportPackageService Application Support: \(applicationSupportURL.path)")
+        print("ExportPackageService export folder: \(exportFolderURL.path)")
         try fileManager.createDirectory(at: exportFolderURL, withIntermediateDirectories: true)
 
         let workingURL = exportFolderURL.appendingPathComponent("Working", isDirectory: true)
@@ -195,11 +197,16 @@ public final class ExportPackageService {
         try manifestData.write(to: manifestURL, options: [.atomic])
 
         let zipURL = exportFolderURL.appendingPathComponent(zipFileName)
+        print("ExportPackageService zip URL: \(zipURL.path)")
         if fileManager.fileExists(atPath: zipURL.path) {
             try fileManager.removeItem(at: zipURL)
         }
 
         try zipWorkingDirectory(workingURL: workingURL, zipURL: zipURL)
+        if !fileManager.fileExists(atPath: zipURL.path) {
+            assertionFailure("ExportPackageService expected zip to exist: \(zipURL.path)")
+            throw ExportError.zipFailed
+        }
 
         let zipData = try Data(contentsOf: zipURL)
         let zipSHA256 = SHA256Hasher.sha256Hex(data: zipData)

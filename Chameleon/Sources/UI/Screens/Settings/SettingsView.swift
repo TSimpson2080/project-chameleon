@@ -5,6 +5,12 @@ public struct SettingsView: View {
 
     public var body: some View {
         List {
+            Section("Company") {
+                NavigationLink("Company Profile") {
+                    CompanyProfileEditView()
+                }
+            }
+
             Section("About") {
                 LabeledContent("App") {
                     Text(appName)

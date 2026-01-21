@@ -60,12 +60,14 @@ struct ExportPackageServiceTests {
         let zipURL = service.urlForExportRelativePath(export.zipPath)
         #expect(zipURL.lastPathComponent.hasPrefix("A-CO0001-"))
         #expect(zipURL.pathExtension == "zip")
+        #expect(FileManager.default.fileExists(atPath: zipURL.path))
 
         let manifestData = try Data(contentsOf: manifestURL)
         #expect(SHA256Hasher.sha256Hex(data: manifestData) == export.manifestSHA256)
         #expect(isLowercaseHex(export.manifestSHA256))
 
         let zipData = try Data(contentsOf: zipURL)
+        #expect(zipData.count > 0)
         #expect(SHA256Hasher.sha256Hex(data: zipData) == export.zipSHA256)
         #expect(isLowercaseHex(export.zipSHA256))
 

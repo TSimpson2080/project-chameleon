@@ -115,6 +115,7 @@ public struct ChangeOrderDetailView: View {
 
                         Button("Create Verified Package") {
                             Task { @MainActor in
+                                print("Bundle ID at package creation: \(Bundle.main.bundleIdentifier ?? "<nil>")")
                                 guard !isExportingPackage else { return }
                                 isExportingPackage = true
                                 defer { isExportingPackage = false }
@@ -125,6 +126,7 @@ public struct ChangeOrderDetailView: View {
                                     let export = try service.exportChangeOrderPackage(changeOrder: changeOrder, job: job)
                                     let zipURL = service.urlForExportRelativePath(export.zipPath)
                                     print("Verified package ZIP: \(zipURL.path)")
+                                    assert(FileManager.default.fileExists(atPath: zipURL.path), "Expected package zip to exist at \(zipURL.path)")
                                     exportSharePayload = ExportSharePayload(url: zipURL)
                                 } catch {
                                     exportError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
