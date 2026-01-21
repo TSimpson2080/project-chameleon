@@ -51,9 +51,9 @@ public struct ExportsListView: View {
         List {
             if exports.isEmpty {
                 ContentUnavailableView(
-                    "No Exports",
+                    "No Verified Packages",
                     systemImage: "tray",
-                    description: Text("Create an export package to see it here.")
+                    description: Text("Create a verified package to see it here.")
                 )
             } else {
                 ForEach(exports, id: \.id) { export in
@@ -66,12 +66,12 @@ public struct ExportsListView: View {
                 }
             }
         }
-        .navigationTitle("Exports")
+        .navigationTitle("Verified Packages")
         .navigationBarTitleDisplayMode(.inline)
         .sheet(item: $sharePayload) { payload in
             ShareSheet(activityItems: [payload.url])
         }
-        .alert("Export Error", isPresented: Binding(
+        .alert("Package Error", isPresented: Binding(
             get: { alertMessage != nil },
             set: { if !$0 { alertMessage = nil } }
         )) {
@@ -83,11 +83,11 @@ public struct ExportsListView: View {
 
     private func share(export: ExportPackageModel) {
         guard let url = exportZipURL(for: export) else {
-            alertMessage = "Could not resolve export ZIP path."
+            alertMessage = "Could not resolve package ZIP path."
             return
         }
         guard FileManager.default.fileExists(atPath: url.path) else {
-            alertMessage = "Export file not found: \(export.zipPath)"
+            alertMessage = "Package file not found: \(export.zipPath)"
             return
         }
         sharePayload = SharePayload(url: url)
@@ -103,7 +103,7 @@ public struct ExportsListView: View {
                 guard let url = resolvedURL else {
                     await MainActor.run {
                         self.verifyingExportIds.remove(exportId)
-                        self.alertMessage = "Could not resolve export ZIP path."
+                        self.alertMessage = "Could not resolve package ZIP path."
                     }
                     return
                 }
@@ -111,7 +111,7 @@ public struct ExportsListView: View {
                 guard FileManager.default.fileExists(atPath: url.path) else {
                     await MainActor.run {
                         self.verifyingExportIds.remove(exportId)
-                        self.alertMessage = "Export file not found: \(url.lastPathComponent)"
+                        self.alertMessage = "Package file not found: \(url.lastPathComponent)"
                     }
                     return
                 }
@@ -232,7 +232,7 @@ private struct ExportRow: View {
     }
 
     private var defaultTitle: String {
-        export.changeOrderId == nil ? "Job Export" : "Change Order Export"
+        export.changeOrderId == nil ? "Job Package" : "Change Order Package"
     }
 
     private func loadChangeOrderTitleIfNeeded() async {
@@ -245,6 +245,9 @@ private struct ExportRow: View {
             )
             descriptor.fetchLimit = 1
             guard let co = try? modelContext.fetch(descriptor).first else { return nil }
+            if let job = co.job {
+                return NumberingService.formatDisplayNumber(job: job, number: co.number, revisionNumber: co.revisionNumber)
+            }
             return NumberingService.formatDisplayNumber(number: co.number, revisionNumber: co.revisionNumber)
         }
         changeOrderTitle = title

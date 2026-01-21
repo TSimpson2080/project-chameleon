@@ -36,22 +36,21 @@
   - [ ] Line items and totals
   - [ ] Signature block for finalized/locked PDFs
 
-### Export Package
-- [ ] Create Export Package from locked change order
+### Verified Package
+- [ ] Create Verified Package from locked change order
 - [ ] Save ZIP to Files
-- [ ] Verify Export ZIP:
-  - [ ] Choose Export ZIP -> PASS
-- [ ] Exports History:
-  - [ ] Export appears in Exports list
-  - [ ] Verify on export row shows PASS
-  - [ ] Share on export row opens share sheet
+- [ ] Verify Package ZIP:
+  - [ ] Choose Package ZIP -> PASS
+- [ ] Verified Packages History:
+  - [ ] Package appears in Verified Packages list
+  - [ ] Verify on package row shows PASS
+  - [ ] Share on package row opens share sheet
 - [ ] Persistence check:
   - [ ] Quit simulator and relaunch
-  - [ ] Export still appears in Exports list (change-order scoped)
+  - [ ] Package still appears in Verified Packages list (change-order scoped)
 
 ## Distribution (when Apple Developer Program is Active)
 - [ ] In Xcode Signing & Capabilities, Team is paid Developer Program (not Personal Team)
 - [ ] Product -> Archive succeeds
 - [ ] Distribute -> App Store Connect upload succeeds
 - [ ] Build appears in App Store Connect TestFlight and can be installed
-

@@ -11,13 +11,13 @@ public final class ExportVerificationService {
         public var errorDescription: String? {
             switch self {
             case .zipNotFound:
-                "Export ZIP file not found."
+                "Package ZIP file not found."
             case .missingManifest:
-                "Export is missing manifest.json."
+                "Package is missing manifest.json."
             case .invalidManifest:
                 "manifest.json is invalid."
             case .unsupportedZipCompression:
-                "Export ZIP uses unsupported compression."
+                "Package ZIP uses unsupported compression."
             }
         }
     }

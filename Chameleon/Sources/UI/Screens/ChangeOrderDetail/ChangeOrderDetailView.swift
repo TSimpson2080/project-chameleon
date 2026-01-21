@@ -86,10 +86,10 @@ public struct ChangeOrderDetailView: View {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
                     Button("Preview PDF") { generateDraftPDF() }
-                    Button("Verify Export ZIP…") {
+                    Button("Verify Package ZIP…") {
                         verifyExportPayload = VerifyExportPayload(initialZipURL: nil)
                     }
-                    Button("Exports") {
+                    Button("Verified Packages") {
                         exportsListPayload = ExportsListPayload(changeOrderId: changeOrder.id)
                     }
                     if changeOrder.isLocked {
@@ -113,7 +113,7 @@ public struct ChangeOrderDetailView: View {
                         }
                         .disabled(isCreatingRevision)
 
-                        Button("Export Package") {
+                        Button("Create Verified Package") {
                             Task { @MainActor in
                                 guard !isExportingPackage else { return }
                                 isExportingPackage = true
@@ -124,6 +124,7 @@ public struct ChangeOrderDetailView: View {
                                     let service = try ExportPackageService(modelContext: modelContext)
                                     let export = try service.exportChangeOrderPackage(changeOrder: changeOrder, job: job)
                                     let zipURL = service.urlForExportRelativePath(export.zipPath)
+                                    print("Verified package ZIP: \(zipURL.path)")
                                     exportSharePayload = ExportSharePayload(url: zipURL)
                                 } catch {
                                     exportError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
@@ -133,11 +134,11 @@ public struct ChangeOrderDetailView: View {
                         .disabled(isExportingPackage)
 
                         if let url = latestExportZipURL() {
-                            Button("Verify Last Export") {
+                            Button("Verify Last Package") {
                                 if FileManager.default.fileExists(atPath: url.path) {
                                     verifyExportPayload = VerifyExportPayload(initialZipURL: url)
                                 } else {
-                                    verifyExportError = "Export ZIP not found at stored path."
+                                    verifyExportError = "Package ZIP not found at stored path."
                                 }
                             }
                         }
@@ -196,7 +197,7 @@ public struct ChangeOrderDetailView: View {
         } message: {
             Text(revisionError ?? "")
         }
-        .alert("Export Failed", isPresented: Binding(
+        .alert("Package Failed", isPresented: Binding(
             get: { exportError != nil },
             set: { if !$0 { exportError = nil } }
         )) {
@@ -204,7 +205,7 @@ public struct ChangeOrderDetailView: View {
         } message: {
             Text(exportError ?? "")
         }
-        .alert("Verify Export Failed", isPresented: Binding(
+        .alert("Verify Package Failed", isPresented: Binding(
             get: { verifyExportError != nil },
             set: { if !$0 { verifyExportError = nil } }
         )) {
@@ -253,7 +254,7 @@ public struct ChangeOrderDetailView: View {
                 ZStack {
                     Color.black.opacity(0.1)
                         .ignoresSafeArea()
-                    ProgressView("Exporting…")
+                    ProgressView("Creating Package…")
                         .padding()
                         .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
                 }
@@ -282,7 +283,12 @@ public struct ChangeOrderDetailView: View {
 
     private var changeOrderSection: some View {
         Section("Change Order") {
-            LabeledContent("Number", value: NumberingService.formatDisplayNumber(number: changeOrder.number, revisionNumber: changeOrder.revisionNumber))
+            LabeledContent(
+                "Number",
+                value: changeOrder.job.map {
+                    NumberingService.formatDisplayNumber(job: $0, number: changeOrder.number, revisionNumber: changeOrder.revisionNumber)
+                } ?? NumberingService.formatDisplayNumber(number: changeOrder.number, revisionNumber: changeOrder.revisionNumber)
+            )
             if changeOrder.isLocked {
                 LabeledContent("Locked", value: "Yes")
             }
@@ -381,7 +387,8 @@ public struct ChangeOrderDetailView: View {
                     ChangeOrderDetailView(changeOrder: co)
                 } label: {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(NumberingService.formatDisplayNumber(number: co.number, revisionNumber: co.revisionNumber))
+                        Text(co.job.map { NumberingService.formatDisplayNumber(job: $0, number: co.number, revisionNumber: co.revisionNumber) }
+                            ?? NumberingService.formatDisplayNumber(number: co.number, revisionNumber: co.revisionNumber))
                             .font(.headline)
                         Text(co.isLocked ? "Locked" : "Draft")
                             .font(.subheadline)
@@ -517,7 +524,9 @@ public struct ChangeOrderDetailView: View {
             }
 
             let input = PDFGenerator.Input(
-                changeOrderNumberText: NumberingService.formatDisplayNumber(number: changeOrder.number, revisionNumber: changeOrder.revisionNumber),
+                changeOrderNumberText: changeOrder.job.map {
+                    NumberingService.formatDisplayNumber(job: $0, number: changeOrder.number, revisionNumber: changeOrder.revisionNumber)
+                } ?? NumberingService.formatDisplayNumber(number: changeOrder.number, revisionNumber: changeOrder.revisionNumber),
                 title: changeOrder.title,
                 details: changeOrder.details,
                 createdAt: changeOrder.createdAt,

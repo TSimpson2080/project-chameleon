@@ -58,6 +58,8 @@ struct ExportPackageServiceTests {
 
         let manifestURL = service.urlForExportRelativePath(export.manifestPath)
         let zipURL = service.urlForExportRelativePath(export.zipPath)
+        #expect(zipURL.lastPathComponent.hasPrefix("A-CO0001-"))
+        #expect(zipURL.pathExtension == "zip")
 
         let manifestData = try Data(contentsOf: manifestURL)
         #expect(SHA256Hasher.sha256Hex(data: manifestData) == export.manifestSHA256)
@@ -79,6 +81,7 @@ struct ExportPackageServiceTests {
         #expect(files.contains(where: { ($0["relativePath"] as? String) == "pdfs/CO-0001.pdf" }))
 
         let changeOrderDict = try #require(manifestDict["changeOrder"] as? [String: Any])
+        #expect((changeOrderDict["displayNumber"] as? String) == "A-0001")
         let lineItems = try #require(changeOrderDict["lineItems"] as? [[String: Any]])
         #expect(lineItems.contains(where: { ($0["category"] as? String) == "other" }))
     }

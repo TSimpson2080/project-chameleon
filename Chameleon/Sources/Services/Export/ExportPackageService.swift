@@ -13,13 +13,13 @@ public final class ExportPackageService {
         public var errorDescription: String? {
             switch self {
             case .missingJob:
-                "Missing job for export."
+                "Missing job for package."
             case .missingSignedPDFPath:
                 "Change order is locked but has no signed PDF path."
             case .missingFile(let path):
                 "Missing file: \(path)"
             case .zipFailed:
-                "Could not create export ZIP."
+                "Could not create package ZIP."
             }
         }
     }
@@ -61,8 +61,11 @@ public final class ExportPackageService {
     public func exportChangeOrderPackage(changeOrder: ChangeOrderModel, job: JobModel) throws -> ExportPackageModel {
         let now = Date()
         let exportId = UUID()
-        let timestamp = exportTimestamp(now)
-        let zipFileName = "Chameleon-Export-\(timestamp).zip"
+        let timestamp = exportFileNameTimestamp(now)
+        let clientSlug = clientSlug(from: job.clientName)
+        let numberSlug = "CO" + String(format: "%04d", max(changeOrder.number, 0))
+        let revisionSlug = changeOrder.revisionNumber > 0 ? "-Rev\(changeOrder.revisionNumber)" : ""
+        let zipFileName = "\(clientSlug)-\(numberSlug)\(revisionSlug)-\(timestamp).zip"
 
         let exportFolderRelativePath = "Exports/\(exportId.uuidString)"
         let exportFolderURL = applicationSupportURL.appendingPathComponent(exportFolderRelativePath, isDirectory: true)
@@ -88,6 +91,9 @@ public final class ExportPackageService {
             metadata: [
                 "jobId": job.id,
                 "changeOrderId": changeOrder.id,
+                "changeOrderNumber": changeOrder.number,
+                "changeOrderRevisionNumber": changeOrder.revisionNumber,
+                "changeOrderDisplayNumber": NumberingService.formatDisplayNumber(job: job, number: changeOrder.number, revisionNumber: changeOrder.revisionNumber),
                 "zipPath": "\(exportFolderRelativePath)/\(zipFileName)",
             ],
             now: now,
@@ -171,6 +177,7 @@ public final class ExportPackageService {
             changeOrder: Manifest.ChangeOrderSummary(
                 id: changeOrder.id.uuidString,
                 number: changeOrder.number,
+                displayNumber: NumberingService.formatDisplayNumber(job: job, number: changeOrder.number, revisionNumber: changeOrder.revisionNumber),
                 revisionNumber: changeOrder.revisionNumber,
                 lockedAt: changeOrder.lockedAt.map(iso8601(_:)),
                 lineItems: manifestLineItems
@@ -268,7 +275,7 @@ public final class ExportPackageService {
         }
 
         let input = PDFGenerator.Input(
-            changeOrderNumberText: NumberingService.formatDisplayNumber(number: changeOrder.number, revisionNumber: changeOrder.revisionNumber),
+            changeOrderNumberText: NumberingService.formatDisplayNumber(job: job, number: changeOrder.number, revisionNumber: changeOrder.revisionNumber),
             title: changeOrder.title,
             details: changeOrder.details,
             createdAt: changeOrder.createdAt,
@@ -366,11 +373,11 @@ public final class ExportPackageService {
         }
     }
 
-    private func exportTimestamp(_ date: Date) -> String {
+    private func exportFileNameTimestamp(_ date: Date) -> String {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = TimeZone(secondsFromGMT: 0)
-        formatter.dateFormat = "yyyyMMdd-HHmmss"
+        formatter.timeZone = TimeZone.current
+        formatter.dateFormat = "yyyy-MM-dd_HHmm"
         return formatter.string(from: date)
     }
 
@@ -391,6 +398,48 @@ public final class ExportPackageService {
 
     private func decimalString(_ value: Decimal) -> String {
         NSDecimalNumber(decimal: value).stringValue
+    }
+
+    private func clientSlug(from clientName: String) -> String {
+        let trimmed = clientName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let parts = trimmed.split(whereSeparator: { $0.isWhitespace })
+        guard !trimmed.isEmpty else { return "Client" }
+
+        if trimmed.contains(",") {
+            return slugifyFileComponent(trimmed, fallback: "Client")
+        }
+
+        guard parts.count >= 2, let lastRaw = parts.last.map(String.init) else {
+            return slugifyFileComponent(trimmed, fallback: "Client")
+        }
+
+        let suffixes: Set<String> = ["inc", "llc", "ltd", "corp", "co", "company", "corporation"]
+        let lastClean = lastRaw.lowercased().filter { $0.isLetter || $0.isNumber }
+        if suffixes.contains(lastClean) {
+            return slugifyFileComponent(trimmed, fallback: "Client")
+        }
+
+        return slugifyFileComponent(lastRaw, fallback: "Client")
+    }
+
+    private func slugifyFileComponent(_ value: String, fallback: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return fallback }
+
+        var scalars: [UnicodeScalar] = []
+        scalars.reserveCapacity(trimmed.unicodeScalars.count)
+        for scalar in trimmed.unicodeScalars {
+            if CharacterSet.alphanumerics.contains(scalar) {
+                scalars.append(scalar)
+            } else if scalar == " " || scalar == "_" || scalar == "-" {
+                scalars.append("_")
+            }
+        }
+
+        let raw = String(String.UnicodeScalarView(scalars))
+        let collapsed = raw.replacingOccurrences(of: "_+", with: "_", options: .regularExpression)
+        let cleaned = collapsed.trimmingCharacters(in: CharacterSet(charactersIn: "_"))
+        return cleaned.isEmpty ? fallback : cleaned
     }
 
     private struct IncludedFile {
@@ -420,6 +469,7 @@ public final class ExportPackageService {
         struct ChangeOrderSummary: Codable {
             let id: String
             let number: Int
+            let displayNumber: String
             let revisionNumber: Int
             let lockedAt: String?
             let lineItems: [LineItemEntry]

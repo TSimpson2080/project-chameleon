@@ -43,7 +43,7 @@ public struct JobDetailView: View {
                             ChangeOrderDetailView(changeOrder: changeOrder)
                         } label: {
                             VStack(alignment: .leading, spacing: 4) {
-                                Text(NumberingService.formatDisplayNumber(number: changeOrder.number, revisionNumber: changeOrder.revisionNumber))
+                                Text(NumberingService.formatDisplayNumber(job: job, number: changeOrder.number, revisionNumber: changeOrder.revisionNumber))
                                     .font(.headline)
                                 Text(changeOrder.title)
                                     .font(.subheadline)
@@ -63,7 +63,7 @@ public struct JobDetailView: View {
                 } label: {
                     Image(systemName: "tray.full")
                 }
-                .accessibilityLabel("Exports")
+                .accessibilityLabel("Verified Packages")
 
                 Button("New Change Order") { createNewChangeOrder() }
             }
@@ -83,8 +83,7 @@ public struct JobDetailView: View {
     }
 
     private func createNewChangeOrder() {
-        let nextNumberString = NumberingService.nextChangeOrderNumber(for: job, using: changeOrders)
-        let nextNumber = NumberingService.parseChangeOrderNumber(nextNumberString) ?? 1
+        let nextNumber = max(job.nextChangeOrderNumber, 1)
         let taxRate = Money.clampTaxRate(job.defaultTaxRate ?? fetchCompanyDefaultTaxRate() ?? 0)
 
         let pricing = PricingCalculator.calculate(lineItems: [], taxRate: taxRate)

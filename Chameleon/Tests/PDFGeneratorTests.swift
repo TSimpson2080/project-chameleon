@@ -7,8 +7,11 @@ import UIKit
 @MainActor
 struct PDFGeneratorTests {
     @Test func generatesValidPDFDataWithNoPhotos() throws {
+        let job = JobModel(clientName: "Bob Smith")
+        let coText = NumberingService.formatChangeOrderDisplay(job: job, number: 1)
+
         let input = PDFGenerator.Input(
-            changeOrderNumberText: "CO-0001",
+            changeOrderNumberText: coText,
             title: "Test",
             details: "Details",
             createdAt: Date(timeIntervalSince1970: 1_700_000_000),
@@ -17,7 +20,7 @@ struct PDFGeneratorTests {
             taxRate: 0.07,
             total: 10.70,
             companyName: "Test Co",
-            jobClientName: "Client",
+            jobClientName: job.clientName,
             jobProjectName: "Project",
             jobAddress: "123 Main",
             terms: "Terms",
@@ -40,11 +43,15 @@ struct PDFGeneratorTests {
         let page = try #require(document?.page(at: 0))
         let text = page.string ?? ""
         #expect(text.contains("Test Co"))
+        #expect(text.contains("Smith-0001"))
     }
 
     @Test func pdfContainsLineItemAndTotalText() throws {
+        let job = JobModel(clientName: "Bob Smith")
+        let coText = NumberingService.formatChangeOrderDisplay(job: job, number: 1)
+
         let input = PDFGenerator.Input(
-            changeOrderNumberText: "CO-0001",
+            changeOrderNumberText: coText,
             title: "Test",
             details: "Details",
             createdAt: Date(timeIntervalSince1970: 1_700_000_000),
@@ -56,7 +63,7 @@ struct PDFGeneratorTests {
                 .init(name: "Paint", quantity: 2, unitPrice: 100, lineTotal: 200, unit: "hrs"),
             ],
             companyName: "Test Co",
-            jobClientName: "Client",
+            jobClientName: job.clientName,
             jobProjectName: "Project",
             jobAddress: "123 Main",
             terms: nil,

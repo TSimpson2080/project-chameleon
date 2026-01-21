@@ -76,6 +76,7 @@ public final class ChangeOrderRepository {
                 "jobId": job.id,
                 "number": safeNumber,
                 "revisionNumber": 0,
+                "displayNumber": NumberingService.formatDisplayNumber(job: job, number: safeNumber, revisionNumber: 0),
             ],
             now: now,
             save: false
@@ -133,6 +134,9 @@ public final class ChangeOrderRepository {
                     "jobId": changeOrder.job?.id as Any,
                     "number": changeOrder.number,
                     "revisionNumber": changeOrder.revisionNumber,
+                    "displayNumber": changeOrder.job.map {
+                        NumberingService.formatDisplayNumber(job: $0, number: changeOrder.number, revisionNumber: changeOrder.revisionNumber)
+                    } ?? NumberingService.formatDisplayNumber(number: changeOrder.number, revisionNumber: changeOrder.revisionNumber),
                     "fields": changedFields,
                 ],
                 now: now,
@@ -281,6 +285,9 @@ public final class ChangeOrderRepository {
                 "jobId": changeOrder.job?.id as Any,
                 "number": changeOrder.number,
                 "revisionNumber": changeOrder.revisionNumber,
+                "displayNumber": changeOrder.job.map {
+                    NumberingService.formatDisplayNumber(job: $0, number: changeOrder.number, revisionNumber: changeOrder.revisionNumber)
+                } ?? NumberingService.formatDisplayNumber(number: changeOrder.number, revisionNumber: changeOrder.revisionNumber),
                 "signatureFilePath": signatureFilePath,
                 "hasName": !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
             ],
@@ -371,6 +378,7 @@ public final class ChangeOrderRepository {
                 "jobId": job.id,
                 "number": number,
                 "revisionNumber": nextRevisionNumber,
+                "displayNumber": NumberingService.formatDisplayNumber(job: job, number: number, revisionNumber: nextRevisionNumber),
                 "sourceChangeOrderId": lockedChangeOrder.id,
             ],
             now: now,
@@ -472,7 +480,7 @@ public final class ChangeOrderRepository {
         }
 
         let input = PDFGenerator.Input(
-            changeOrderNumberText: NumberingService.formatDisplayNumber(number: changeOrder.number, revisionNumber: changeOrder.revisionNumber),
+            changeOrderNumberText: NumberingService.formatDisplayNumber(job: job, number: changeOrder.number, revisionNumber: changeOrder.revisionNumber),
             title: changeOrder.title,
             details: changeOrder.details,
             createdAt: changeOrder.createdAt,
@@ -516,6 +524,7 @@ public final class ChangeOrderRepository {
                 "jobId": job.id,
                 "number": changeOrder.number,
                 "revisionNumber": changeOrder.revisionNumber,
+                "displayNumber": NumberingService.formatDisplayNumber(job: job, number: changeOrder.number, revisionNumber: changeOrder.revisionNumber),
                 "signedPdfPath": signedPath,
                 "signedPdfHash": hash,
             ],
@@ -593,6 +602,9 @@ public final class ChangeOrderRepository {
                     "jobId": changeOrder.job?.id as Any,
                     "number": changeOrder.number,
                     "revisionNumber": changeOrder.revisionNumber,
+                    "displayNumber": changeOrder.job.map {
+                        NumberingService.formatDisplayNumber(job: $0, number: changeOrder.number, revisionNumber: changeOrder.revisionNumber)
+                    } ?? NumberingService.formatDisplayNumber(number: changeOrder.number, revisionNumber: changeOrder.revisionNumber),
                     "fields": ["lineItems"],
                     "lineItemCount": changeOrder.lineItems.count,
                     "lineItemCategoryCounts": categoryCounts,

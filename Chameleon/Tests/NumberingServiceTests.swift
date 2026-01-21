@@ -46,5 +46,20 @@ struct NumberingServiceTests {
         #expect(nextA == "CO-0004")
         #expect(nextB == "CO-0011")
     }
-}
 
+    @Test func customerPrefixUsesLastWord() {
+        let job = JobModel(clientName: "Bob Smith")
+        #expect(NumberingService.customerPrefix(for: job) == "Smith")
+        #expect(NumberingService.formatChangeOrderDisplay(job: job, number: 1) == "Smith-0001")
+    }
+
+    @Test func customerPrefixTrimsAndIgnoresPunctuation() {
+        let job = JobModel(clientName: "  Bob   A.  Smith ")
+        #expect(NumberingService.customerPrefix(for: job) == "Smith")
+    }
+
+    @Test func customerPrefixFallsBackWhenEmpty() {
+        let job = JobModel(clientName: "   ")
+        #expect(NumberingService.customerPrefix(for: job) == "CO")
+    }
+}

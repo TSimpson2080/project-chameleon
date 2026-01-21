@@ -20,7 +20,7 @@ public struct VerifyExportScreen: View {
     public var body: some View {
         List {
             Section {
-                Button("Choose Export ZIP") { isPresentingImporter = true }
+                Button("Choose Package ZIP") { isPresentingImporter = true }
                     .disabled(isVerifying)
 
                 if let url = selectedZipURL {
@@ -118,7 +118,7 @@ public struct VerifyExportScreen: View {
                 }
             }
         }
-        .navigationTitle("Verify Export")
+        .navigationTitle("Verify Package")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
