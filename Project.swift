@@ -1,6 +1,9 @@
 import ProjectDescription
 
 let projectSettings = Settings.settings(
+    base: [
+        "ASSETCATALOG_COMPILER_APPICON_NAME": "AppIcon",
+    ],
     configurations: [
         .debug(name: "Debug"),
         .release(
@@ -23,14 +26,15 @@ let project = Project(
             destinations: .iOS,
             product: .app,
             bundleId: "com.tsimpson.chameleon",
-	            infoPlist: .extendingDefault(
-	                with: [
-	                    "CFBundleShortVersionString": "1.0.0",
-	                    "CFBundleVersion": "1",
-	                    "NSPhotoLibraryUsageDescription": "Select photos to attach to change orders.",
-	                    "NSPhotoLibraryAddUsageDescription": "Save exported PDFs and diagnostics to your photo library if you choose.",
-	                    "UILaunchScreen": [
-	                        "UIColorName": "",
+            infoPlist: .extendingDefault(
+                with: [
+                    "CFBundleShortVersionString": "1.0.0",
+                    "CFBundleVersion": "1",
+                    "CFBundleIconName": "AppIcon",
+                    "NSPhotoLibraryUsageDescription": "Select photos to attach to change orders.",
+                    "NSPhotoLibraryAddUsageDescription": "Save exported PDFs and diagnostics to your photo library if you choose.",
+                    "UILaunchScreen": [
+                        "UIColorName": "",
 	                        "UIImageName": "",
 	                    ],
 	                ]
