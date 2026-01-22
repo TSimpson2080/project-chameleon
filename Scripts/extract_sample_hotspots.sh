@@ -6,8 +6,7 @@ usage() {
 Usage: extract_sample_hotspots.sh <sample.txt> [--lines N]
 
 Extracts hotspots from macOS `sample` output.
-Prefers the "Sort by top of stack" section when present, otherwise falls back
-to the "Call graph:" section.
+Extracts the "Sort by top of stack" section.
 EOF
 }
 
@@ -60,17 +59,9 @@ if grep -q '^Sort by top of stack' "$file"; then
     printing {
       print
       printed++
-      if(printed >= 5 && $0 ~ /^[[:space:]]*$/) { exit 0 }
+      # Stop at the first blank line after the section begins.
+      if(printed > 1 && $0 ~ /^[[:space:]]*$/) { exit 0 }
     }
-  ' "$file" | head -n "$lines"
-  exit 0
-fi
-
-if grep -q '^Call graph:' "$file"; then
-  awk '
-    BEGIN { printing=0 }
-    /^Call graph:/ { printing=1 }
-    printing { print }
   ' "$file" | head -n "$lines"
   exit 0
 fi
@@ -78,6 +69,4 @@ fi
 echo "Could not find a hotspots section in: $file" >&2
 echo "Expected one of:" >&2
 echo "  - 'Sort by top of stack'" >&2
-echo "  - 'Call graph:'" >&2
 exit 1
-

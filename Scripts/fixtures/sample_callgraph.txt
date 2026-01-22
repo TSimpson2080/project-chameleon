@@ -1,0 +1,16 @@
+Analysis of sampling Chameleon (pid 40541) every 1 millisecond
+----
+
+Call graph:
+    120 Thread_5568201   DispatchQueue_1: com.apple.main-thread  (serial)
+    + 120 start  (in dyld) + 7184  [0x102f70d54]
+    + 120 UIApplicationMain  (in UIKitCore) + 124  [0x18634c79c]
+    + 120 __CFRunLoopRun  (in CoreFoundation) + 1128  [0x180454dbc]
+    120 Thread_5568209: com.apple.uikit.eventfetch-thread
+    + 120 thread_start  (in libsystem_pthread.dylib) + 8  [0x102b89998]
+
+Sort by top of stack, same collapsed (when >= 5):
+        start_wqthread  (in libsystem_pthread.dylib)        43335
+        mach_msg2_trap  (in libsystem_kernel.dylib)        17334
+        semaphore_wait_trap  (in libsystem_kernel.dylib)        8667
+
