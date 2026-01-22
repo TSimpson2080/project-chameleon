@@ -29,7 +29,7 @@ let project = Project(
             infoPlist: .extendingDefault(
                 with: [
                     "CFBundleShortVersionString": "1.0.0",
-                    "CFBundleVersion": "1",
+                    "CFBundleVersion": "3",
                     "CFBundleIconName": "AppIcon",
                     "NSPhotoLibraryUsageDescription": "Select photos to attach to change orders.",
                     "NSPhotoLibraryAddUsageDescription": "Save exported PDFs and diagnostics to your photo library if you choose.",
