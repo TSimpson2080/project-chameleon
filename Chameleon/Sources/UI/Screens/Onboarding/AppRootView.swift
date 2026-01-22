@@ -27,7 +27,10 @@ public struct AppRootView: View {
             .fullScreenCover(isPresented: $isPresentingOnboarding) {
                 OnboardingFlowView()
             }
-            .onAppear { updatePresentation() }
+            .onAppear {
+                HangDiagnostics.shared.startIfEnabled()
+                updatePresentation()
+            }
             .onChange(of: needsCompanyProfile) { _, _ in updatePresentation() }
             .onChange(of: didSkipCompanyOnboarding) { _, _ in updatePresentation() }
     }
@@ -78,4 +81,3 @@ private struct CompanyProfileSetupBanner: View {
         .background(.regularMaterial)
     }
 }
-

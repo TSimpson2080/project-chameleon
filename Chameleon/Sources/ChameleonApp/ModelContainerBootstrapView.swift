@@ -6,6 +6,7 @@ struct ModelContainerBootstrapView: View {
     @State private var errorMessage: String?
     @State private var didStartLoading = false
     @State private var didTriggerTimeout = false
+    @State private var secondsElapsed: Int = 0
 
     var body: some View {
         Group {
@@ -27,6 +28,7 @@ struct ModelContainerBootstrapView: View {
                                 self.modelContainer = nil
                                 self.didStartLoading = false
                                 self.didTriggerTimeout = false
+                                self.secondsElapsed = 0
                             } catch {
                                 self.errorMessage = "Failed to reset local database.\n\n\(error)"
                             }
@@ -38,6 +40,7 @@ struct ModelContainerBootstrapView: View {
                             self.modelContainer = nil
                             self.didStartLoading = false
                             self.didTriggerTimeout = false
+                            self.secondsElapsed = 0
                         }
                         .buttonStyle(.borderedProminent)
                     }
@@ -45,9 +48,14 @@ struct ModelContainerBootstrapView: View {
                 }
             } else {
                 VStack(spacing: 12) {
+                    Text("Chameleon")
+                        .font(.title2.weight(.semibold))
                     ProgressView()
-                    Text("Loading…")
+                    Text("Loading… (\(secondsElapsed)s)")
                         .foregroundStyle(.secondary)
+                    Text("Version \(appVersionString)")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
@@ -56,9 +64,19 @@ struct ModelContainerBootstrapView: View {
         .task {
             guard !didStartLoading else { return }
             didStartLoading = true
-            startTimeoutWatcher()
-            loadModelContainer()
+            await Task.yield()
+            startElapsedTicker()
+            startTimeoutWatcher(seconds: 6.0)
+            DispatchQueue.main.async {
+                loadModelContainer()
+            }
         }
+    }
+
+    private var appVersionString: String {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"
+        return "\(version) (\(build))"
     }
 
     private func loadModelContainer() {
@@ -98,6 +116,15 @@ struct ModelContainerBootstrapView: View {
 
             This can happen if the local database is busy or corrupted. You can try again, or reset the local database (this clears local data).
             """
+        }
+    }
+
+    private func startElapsedTicker() {
+        Task { @MainActor in
+            while self.modelContainer == nil, self.errorMessage == nil {
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                self.secondsElapsed += 1
+            }
         }
     }
 
