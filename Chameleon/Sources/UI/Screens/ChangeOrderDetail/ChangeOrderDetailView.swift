@@ -454,9 +454,9 @@ public struct ChangeOrderDetailView: View {
 
     private var totalsSection: some View {
         Section("Totals") {
-            LabeledContent("Subtotal", value: formatCurrency(pricingBreakdown.subtotal))
-            LabeledContent("Tax (\(formatPercent(taxRate)))", value: formatCurrency(pricingBreakdown.tax))
-            LabeledContent("Total", value: formatCurrency(pricingBreakdown.total))
+            LabeledContent("Subtotal", value: MoneyFormatting.currencyUSD(pricingBreakdown.subtotal))
+            LabeledContent("Tax (\(MoneyFormatting.taxRatePercent(taxRate)))", value: MoneyFormatting.currencyUSD(pricingBreakdown.tax))
+            LabeledContent("Total", value: MoneyFormatting.currencyUSD(pricingBreakdown.total))
         }
     }
 
@@ -707,27 +707,7 @@ public struct ChangeOrderDetailView: View {
         return appSupport.appendingPathComponent(export.zipPath)
     }
 
-    private func formatCurrency(_ value: Decimal) -> String {
-        let number = NSDecimalNumber(decimal: Money.round(value))
-        let formatter = NumberFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.numberStyle = .currency
-        formatter.currencyCode = "USD"
-        formatter.minimumFractionDigits = 2
-        formatter.maximumFractionDigits = 2
-        return formatter.string(from: number) ?? "\(number)"
-    }
-
-    private func formatPercent(_ value: Decimal) -> String {
-        let percent = NSDecimalNumber(decimal: Money.round(value * 100, scale: 2))
-        let formatter = NumberFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.numberStyle = .decimal
-        formatter.minimumFractionDigits = 0
-        formatter.maximumFractionDigits = 2
-        let text = formatter.string(from: percent) ?? "\(percent)"
-        return "\(text)%"
-    }
+    // Formatting helpers moved to MoneyFormatting for caching/performance.
 }
 
 private struct LineItemRow: View {
@@ -740,9 +720,9 @@ private struct LineItemRow: View {
                     .foregroundStyle(.primary)
 
                 HStack(spacing: 6) {
-                    Text("\(formatDecimal(item.quantity))")
+                    Text(MoneyFormatting.decimal(item.quantity, minFractionDigits: 0, maxFractionDigits: 2))
                     Text("×")
-                    Text(formatCurrency(item.unitPrice))
+                    Text(MoneyFormatting.currencyUSD(item.unitPrice))
                     if let unit = item.unit?.trimmingCharacters(in: .whitespacesAndNewlines), !unit.isEmpty {
                         Text(unit)
                             .foregroundStyle(.secondary)
@@ -754,31 +734,10 @@ private struct LineItemRow: View {
 
             Spacer()
 
-            Text(formatCurrency(item.lineTotal))
+            Text(MoneyFormatting.currencyUSD(item.lineTotal))
                 .font(.subheadline)
                 .foregroundStyle(.primary)
         }
-    }
-
-    private func formatCurrency(_ value: Decimal) -> String {
-        let number = NSDecimalNumber(decimal: Money.round(value))
-        let formatter = NumberFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.numberStyle = .currency
-        formatter.currencyCode = "USD"
-        formatter.minimumFractionDigits = 2
-        formatter.maximumFractionDigits = 2
-        return formatter.string(from: number) ?? "\(number)"
-    }
-
-    private func formatDecimal(_ value: Decimal) -> String {
-        let number = NSDecimalNumber(decimal: Money.round(value))
-        let formatter = NumberFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.numberStyle = .decimal
-        formatter.minimumFractionDigits = 0
-        formatter.maximumFractionDigits = 2
-        return formatter.string(from: number) ?? "\(number)"
     }
 }
 
