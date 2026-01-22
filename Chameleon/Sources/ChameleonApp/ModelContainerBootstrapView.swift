@@ -5,6 +5,7 @@ struct ModelContainerBootstrapView: View {
     @State private var modelContainer: ModelContainer?
     @State private var errorMessage: String?
     @State private var didStartLoading = false
+    @State private var didTriggerTimeout = false
 
     var body: some View {
         Group {
@@ -18,12 +19,28 @@ struct ModelContainerBootstrapView: View {
                     description: Text(errorMessage)
                 )
                 .overlay(alignment: .bottom) {
-                    Button("Retry") {
-                        self.errorMessage = nil
-                        self.modelContainer = nil
-                        self.didStartLoading = false
+                    HStack(spacing: 12) {
+                        Button("Reset Database") {
+                            do {
+                                try resetLocalDatabase()
+                                self.errorMessage = nil
+                                self.modelContainer = nil
+                                self.didStartLoading = false
+                                self.didTriggerTimeout = false
+                            } catch {
+                                self.errorMessage = "Failed to reset local database.\n\n\(error)"
+                            }
+                        }
+                        .buttonStyle(.bordered)
+
+                        Button("Retry") {
+                            self.errorMessage = nil
+                            self.modelContainer = nil
+                            self.didStartLoading = false
+                            self.didTriggerTimeout = false
+                        }
+                        .buttonStyle(.borderedProminent)
                     }
-                    .buttonStyle(.borderedProminent)
                     .padding()
                 }
             } else {
@@ -35,9 +52,11 @@ struct ModelContainerBootstrapView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
+        .background(Color(.systemBackground))
         .task {
             guard !didStartLoading else { return }
             didStartLoading = true
+            startTimeoutWatcher()
             loadModelContainer()
         }
     }
@@ -67,5 +86,32 @@ struct ModelContainerBootstrapView: View {
             }
         }
     }
-}
 
+    private func startTimeoutWatcher(seconds: TimeInterval = 8.0) {
+        guard !didTriggerTimeout else { return }
+        didTriggerTimeout = true
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+            guard self.modelContainer == nil, self.errorMessage == nil else { return }
+            self.errorMessage = """
+            Startup is taking longer than expected.
+
+            This can happen if the local database is busy or corrupted. You can try again, or reset the local database (this clears local data).
+            """
+        }
+    }
+
+    private func resetLocalDatabase() throws {
+        let base = try ApplicationSupportLocator.baseURL()
+        let store = base.appendingPathComponent("default.store")
+        let wal = base.appendingPathComponent("default.store-wal")
+        let shm = base.appendingPathComponent("default.store-shm")
+
+        let fileManager = FileManager.default
+        for url in [store, wal, shm] {
+            if fileManager.fileExists(atPath: url.path) {
+                try fileManager.removeItem(at: url)
+            }
+        }
+    }
+}

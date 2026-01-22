@@ -30,8 +30,9 @@ let project = Project(
       deploymentTarget: .iOS(targetVersion: "17.0", devices: [.iphone]),
 	      infoPlist: .extendingDefault(with: [
 	        "CFBundleShortVersionString": "1.0.0",
-	        "CFBundleVersion": "3",
+	        "CFBundleVersion": "4",
 	        "CFBundleIconName": "AppIcon",
+	        "EnableHangDiagnostics": true,
 	        "NSPhotoLibraryUsageDescription": "Select photos to attach to change orders.",
 	        "NSPhotoLibraryAddUsageDescription": "Save exported PDFs and diagnostics to your photo library if you choose.",
 	      ]),
