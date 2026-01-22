@@ -3,30 +3,13 @@ import SwiftData
 
 @main
 struct ChameleonApp: App {
-    private let modelContainer: ModelContainer
-
     init() {
-        do {
-            modelContainer = try ModelContainer(
-                for: CompanyProfileModel.self,
-                JobModel.self,
-                ChangeOrderModel.self,
-                LineItemModel.self,
-                AttachmentModel.self,
-                AuditEventModel.self,
-                ExportPackageModel.self
-            )
-        } catch {
-            fatalError("Failed to create SwiftData ModelContainer: \(error)")
-        }
-
         HangDiagnostics.shared.startIfEnabled()
     }
 
     var body: some Scene {
         WindowGroup {
-            AppRootView()
-                .modelContainer(modelContainer)
+            ModelContainerBootstrapView()
         }
     }
 }
