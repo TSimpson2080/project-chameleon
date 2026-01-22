@@ -77,7 +77,7 @@ public struct SettingsView: View {
     private var appName: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
             ?? Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String
-            ?? "Chameleon"
+            ?? "ReScope"
     }
 
     private var versionString: String {

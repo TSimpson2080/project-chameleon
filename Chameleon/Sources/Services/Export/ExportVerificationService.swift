@@ -13,7 +13,7 @@ public final class ExportVerificationService {
             case .zipNotFound:
                 "Package ZIP file not found."
             case .missingManifest:
-                "ZIP did not contain manifest.json at the root. This usually means you selected a ZIP not created by Chameleon."
+                "ZIP did not contain manifest.json at the root. This usually means you selected a ZIP not created by ReScope."
             case .invalidManifest:
                 "manifest.json is invalid."
             case .unsupportedZipCompression:

@@ -29,8 +29,10 @@ let project = Project(
       bundleId: "com.tsimpson.chameleon",
       deploymentTarget: .iOS(targetVersion: "17.0", devices: [.iphone]),
 	      infoPlist: .extendingDefault(with: [
+	        "CFBundleDisplayName": "ReScope",
+	        "CFBundleName": "ReScope",
 	        "CFBundleShortVersionString": "1.0.0",
-	        "CFBundleVersion": "13",
+	        "CFBundleVersion": "14",
 	        "CFBundleIconName": "AppIcon",
 	        "EnableHangDiagnostics": true,
 	        "NSPhotoLibraryUsageDescription": "Select photos to attach to change orders.",

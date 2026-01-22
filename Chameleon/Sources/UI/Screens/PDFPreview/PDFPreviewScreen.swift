@@ -69,7 +69,7 @@ public struct PDFPreviewScreen: View {
 
 	    private func writeTempPDF() -> URL? {
 	        let directory = FileManager.default.temporaryDirectory
-	        let url = directory.appendingPathComponent("Chameleon-\(UUID().uuidString).pdf")
+	        let url = directory.appendingPathComponent("ReScope-\(UUID().uuidString).pdf")
 	        print("Writing temp PDF to: \(url.path) bytes=\(pdfData.count) header=\(String(bytes: pdfData.prefix(8), encoding: .ascii) ?? "<non-ascii>")")
 
 	        do {

@@ -140,7 +140,7 @@ public final class HangDiagnostics {
         let bundleId = Bundle.main.bundleIdentifier ?? "?"
 
         var report: [String] = []
-        report.append("Chameleon Hang Report")
+        report.append("ReScope Hang Report")
         report.append("Timestamp: \(Self.fileTimestampFormatter.string(from: now))")
         report.append("Bundle: \(bundleId)")
         report.append("Version: \(version) (\(build))")

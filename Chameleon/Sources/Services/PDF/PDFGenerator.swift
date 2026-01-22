@@ -127,7 +127,7 @@ public enum PDFGenerator {
         let bodyFont = UIFont.systemFont(ofSize: 12, weight: .regular)
         let smallFont = UIFont.systemFont(ofSize: 10, weight: .regular)
 
-        let company = (input.companyName?.trimmingCharacters(in: .whitespacesAndNewlines)).flatMap { $0.isEmpty ? nil : $0 } ?? "Chameleon"
+        let company = (input.companyName?.trimmingCharacters(in: .whitespacesAndNewlines)).flatMap { $0.isEmpty ? nil : $0 } ?? "ReScope"
         let logoSize: CGFloat = 44
         let logoPadding: CGFloat = 10
         if let logo = input.companyLogoImage {

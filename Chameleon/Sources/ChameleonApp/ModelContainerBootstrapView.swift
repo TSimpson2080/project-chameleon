@@ -48,7 +48,7 @@ struct ModelContainerBootstrapView: View {
                 }
             } else {
                 VStack(spacing: 12) {
-                    Text("Chameleon")
+                    Text("ReScope")
                         .font(.title2.weight(.semibold))
                     ProgressView()
                     Text("Loading… (\(secondsElapsed)s)")
