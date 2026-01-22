@@ -34,6 +34,24 @@ This writes a timestamped folder under `Scripts/output/` containing:
 - `main-thread-<i>.txt` (Thread 0 equivalent / `com.apple.main-thread` call-graph block)
 - `hotspots-<i>.txt` (“Sort by top of stack…” section)
 
+## Analyze a triage run (actionable summary)
+
+```bash
+cd ~/dev/project-chameleon/Chameleon
+Scripts/analyze_triage_run.sh
+```
+
+Analyze a specific folder:
+
+```bash
+cd ~/dev/project-chameleon/Chameleon
+Scripts/analyze_triage_run.sh Scripts/output/<YYYYMMDD-HHMMSS>
+```
+
+This writes `report.md` into the triage output folder with:
+- per-sample main-thread leaf + hotspots top 3
+- a simple classification (idle/busy/background CPU/insufficient)
+
 ## Quick interpretation tips
 
 - If the “main thread” stack ends in `mach_msg2_trap` / runloop frames, it often means the main runloop is idle at that instant.
