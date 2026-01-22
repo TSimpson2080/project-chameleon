@@ -63,10 +63,10 @@ public struct ChangeOrderDetailView: View {
     public init(changeOrder: ChangeOrderModel) {
         self.changeOrder = changeOrder
 
-        let jobId = changeOrder.job?.persistentModelID
+        let targetJobId: UUID? = changeOrder.job?.id
         let number = changeOrder.number
         let predicate = #Predicate<ChangeOrderModel> { co in
-            co.job?.persistentModelID == jobId && co.number == number
+            co.job?.id == targetJobId && co.number == number
         }
         _revisionsForNumber = Query(filter: predicate, sort: [SortDescriptor(\.revisionNumber, order: .reverse)])
     }

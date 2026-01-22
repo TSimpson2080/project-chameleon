@@ -325,11 +325,11 @@ public final class ChangeOrderRepository {
         guard lockedChangeOrder.isLocked else { throw RepositoryError.lockedRecordImmutable }
         guard let job = lockedChangeOrder.job else { throw RepositoryError.missingJob }
 
-        let jobId = job.persistentModelID
+        let targetJobId: UUID? = job.id
         let number = lockedChangeOrder.number
         var descriptor = FetchDescriptor<ChangeOrderModel>(
             predicate: #Predicate<ChangeOrderModel> { changeOrder in
-                changeOrder.job?.persistentModelID == jobId && changeOrder.number == number
+                changeOrder.job?.id == targetJobId && changeOrder.number == number
             },
             sortBy: [SortDescriptor(\.revisionNumber, order: .reverse)]
         )
@@ -385,10 +385,10 @@ public final class ChangeOrderRepository {
             save: false
         )
 
-        let lockedId = lockedChangeOrder.persistentModelID
+        let lockedId = lockedChangeOrder.id
         let lineItems = try modelContext.fetch(FetchDescriptor<LineItemModel>(
             predicate: #Predicate<LineItemModel> { item in
-                item.changeOrder?.persistentModelID == lockedId
+                item.changeOrder?.id == lockedId
             }
         ))
         for item in lineItems.sorted(by: { $0.sortIndex < $1.sortIndex }) {
@@ -409,7 +409,7 @@ public final class ChangeOrderRepository {
 
         let attachments = try modelContext.fetch(FetchDescriptor<AttachmentModel>(
             predicate: #Predicate<AttachmentModel> { attachment in
-                attachment.changeOrder?.persistentModelID == lockedId
+                attachment.changeOrder?.id == lockedId
             }
         ))
         for attachment in attachments where attachment.type == .photo {
@@ -537,9 +537,9 @@ public final class ChangeOrderRepository {
     }
 
     public func fetchChangeOrders(for job: JobModel, search: String? = nil) throws -> [ChangeOrderModel] {
-        let jobId = job.persistentModelID
+        let targetJobId: UUID? = job.id
         let predicate = #Predicate<ChangeOrderModel> { changeOrder in
-            changeOrder.job?.persistentModelID == jobId
+            changeOrder.job?.id == targetJobId
         }
         let descriptor = FetchDescriptor<ChangeOrderModel>(
             predicate: predicate,

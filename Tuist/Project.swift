@@ -30,7 +30,7 @@ let project = Project(
       deploymentTarget: .iOS(targetVersion: "17.0", devices: [.iphone]),
 	      infoPlist: .extendingDefault(with: [
 	        "CFBundleShortVersionString": "1.0.0",
-	        "CFBundleVersion": "5",
+	        "CFBundleVersion": "6",
 	        "CFBundleIconName": "AppIcon",
 	        "EnableHangDiagnostics": true,
 	        "NSPhotoLibraryUsageDescription": "Select photos to attach to change orders.",

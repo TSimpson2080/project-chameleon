@@ -9,9 +9,9 @@ public struct JobDetailView: View {
     public init(job: JobModel) {
         self.job = job
 
-        let jobId = job.persistentModelID
+        let targetJobId: UUID? = job.id
         let predicate = #Predicate<ChangeOrderModel> { changeOrder in
-            changeOrder.job?.persistentModelID == jobId
+            changeOrder.job?.id == targetJobId
         }
         _changeOrders = Query(
             filter: predicate,
