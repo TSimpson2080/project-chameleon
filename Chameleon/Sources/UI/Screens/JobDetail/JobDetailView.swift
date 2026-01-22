@@ -2,6 +2,10 @@ import SwiftUI
 import SwiftData
 
 public struct JobDetailView: View {
+    private struct ChangeOrderRoute: Hashable {
+        let id: UUID
+    }
+
     @Environment(\.modelContext) private var modelContext
     @Bindable private var job: JobModel
     @Query private var changeOrders: [ChangeOrderModel]
@@ -39,9 +43,7 @@ public struct JobDetailView: View {
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(changeOrders, id: \.id) { changeOrder in
-                        NavigationLink {
-                            ChangeOrderDetailView(changeOrder: changeOrder, job: job)
-                        } label: {
+                        NavigationLink(value: ChangeOrderRoute(id: changeOrder.id)) {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(NumberingService.formatDisplayNumber(job: job, number: changeOrder.number, revisionNumber: changeOrder.revisionNumber))
                                     .font(.headline)
@@ -56,6 +58,9 @@ public struct JobDetailView: View {
         }
         .navigationTitle(job.clientName)
         .navigationBarTitleDisplayMode(.inline)
+        .navigationDestination(for: ChangeOrderRoute.self) { route in
+            ChangeOrderDestinationView(changeOrderId: route.id, job: job)
+        }
         .onAppear {
             Task { @MainActor in
                 HangDiagnostics.shared.setCurrentScreen("JobDetail")
@@ -72,18 +77,6 @@ public struct JobDetailView: View {
 
                 Button("New Change Order") { createNewChangeOrder() }
             }
-        }
-        .onChange(of: job.clientName) { _, _ in touchUpdatedAt() }
-        .onChange(of: job.projectName) { _, _ in touchUpdatedAt() }
-        .onChange(of: job.address) { _, _ in touchUpdatedAt() }
-    }
-
-    private func touchUpdatedAt() {
-        do {
-            let repository = JobRepository(modelContext: modelContext)
-            try repository.touchJob(job)
-        } catch {
-            assertionFailure("Failed to save job update: \(error)")
         }
     }
 
@@ -115,5 +108,30 @@ public struct JobDetailView: View {
         var descriptor = FetchDescriptor<CompanyProfileModel>()
         descriptor.fetchLimit = 1
         return (try? modelContext.fetch(descriptor).first)?.defaultTaxRate
+    }
+}
+
+private struct ChangeOrderDestinationView: View {
+    @Query private var changeOrders: [ChangeOrderModel]
+    private let job: JobModel
+
+    init(changeOrderId: UUID, job: JobModel) {
+        self.job = job
+
+        let target: UUID = changeOrderId
+        _changeOrders = Query(
+            filter: #Predicate<ChangeOrderModel> { co in
+                co.id == target
+            },
+            sort: []
+        )
+    }
+
+    var body: some View {
+        if let changeOrder = changeOrders.first {
+            ChangeOrderDetailView(changeOrder: changeOrder, job: job)
+        } else {
+            ContentUnavailableView("Change Order Missing", systemImage: "doc.text.magnifyingglass")
+        }
     }
 }
