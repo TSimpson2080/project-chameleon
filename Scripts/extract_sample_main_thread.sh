@@ -91,17 +91,15 @@ fi
 # There may be no literal "Thread 0:" lines.
 if grep -q 'com\.apple\.main-thread' "$file"; then
   awk '
-    BEGIN { found=0 }
-    /^[[:space:]]*[0-9]+[[:space:]]+Thread_[0-9]+/ {
+    BEGIN { inCallGraph=0; found=0 }
+    /^Call graph:/ { inCallGraph=1; next }
+    inCallGraph && /^[[:space:]]*[0-9]+[[:space:]]+Thread_[0-9]+/ {
       if(found) { exit 0 }
+      if($0 ~ /com[.]apple[.]main-thread/) { found=1; print; next }
+      next
     }
-    {
-      if(!found && $0 ~ /com\.apple\.main-thread/) { found=1 }
-      if(found) { print }
-    }
-    END {
-      if(!found) { exit 1 }
-    }
+    found { print }
+    END { if(!found) exit 1 }
   ' "$file" | head -n "$lines"
   exit 0
 fi

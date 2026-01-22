@@ -1,15 +1,36 @@
 # Blank screen triage (Simulator)
 
-Copy/paste:
+## Fixture demo (no sudo required)
+
+```bash
+cd ~/dev/project-chameleon/Chameleon
+Scripts/extract_sample_main_thread.sh Scripts/fixtures/sample_callgraph.txt --lines 40
+Scripts/extract_sample_hotspots.sh Scripts/fixtures/sample_callgraph.txt --lines 20
+```
+
+## Run script tests
+
+```bash
+cd ~/dev/project-chameleon/Chameleon
+Scripts/Tests/run.sh
+```
+
+## Capture during a blank screen
 
 ```bash
 cd ~/dev/project-chameleon/Chameleon
 Scripts/capture_samples.sh
 ```
 
-This captures 3 short `sample` traces from the running Simulator app, then prints:
-- the `com.apple.main-thread` call-graph block (Thread 0 equivalent)
-- the `Sort by top of stack...` hotspots section
+This writes a timestamped folder under `Scripts/output/` containing:
+- `chameleon-sample-<i>.txt` (raw `sample` output)
+- `main-thread-<i>.txt` (Thread 0 equivalent / `com.apple.main-thread` call-graph block)
+- `hotspots-<i>.txt` (“Sort by top of stack…” section)
+
+## Quick interpretation tips
+
+- If the “main thread” stack ends in `mach_msg2_trap` / runloop frames, it often means the main runloop is idle at that instant.
+- The “hotspots” section shows where CPU time is accumulating (top-of-stack collapsed samples). Look for app/SwiftUI frames, PDF generation, hashing, or filesystem work.
 
 ## Manual fallback
 
@@ -36,4 +57,3 @@ xcrun devicectl device launch app --terminate-existing --device <udid> --console
 ```
 
 Some environments don’t support a separate `devicectl device log stream` flow; `--console` on launch is often the most reliable.
-

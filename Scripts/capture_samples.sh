@@ -3,62 +3,37 @@ set -euo pipefail
 
 usage() {
   cat >&2 <<'EOF'
-Usage: capture_samples.sh [--count N] [--seconds S] [--lines-main N] [--lines-hot N]
+Usage: capture_samples.sh
 
 Captures repeated macOS `sample` output from the running Chameleon Simulator process,
 then extracts the com.apple.main-thread call-graph block and the "Sort by top of stack"
 hotspots block for each sample.
+
+Configuration via env vars:
+  SAMPLES  (default: 3)
+  DURATION (default: 5 seconds per sample)
 EOF
 }
 
-count=3
-seconds=5
-lines_main=120
-lines_hot=80
+SAMPLES="${SAMPLES:-3}"
+DURATION="${DURATION:-5}"
 
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-    --count)
-      shift
-      count="${1:-}"
-      shift || true
-      ;;
-    --seconds)
-      shift
-      seconds="${1:-}"
-      shift || true
-      ;;
-    --lines-main)
-      shift
-      lines_main="${1:-}"
-      shift || true
-      ;;
-    --lines-hot)
-      shift
-      lines_hot="${1:-}"
-      shift || true
-      ;;
-    -h|--help)
-      usage
-      exit 0
-      ;;
-    *)
-      echo "Unexpected argument: $1" >&2
-      usage
-      exit 2
-      ;;
-  esac
-done
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  usage
+  exit 0
+fi
+if [[ $# -gt 0 ]]; then
+  echo "Unexpected arguments: $*" >&2
+  usage
+  exit 2
+fi
 
-for v in "$count" "$seconds" "$lines_main" "$lines_hot"; do
-  if ! [[ "$v" =~ ^[0-9]+$ ]]; then
-    echo "Expected numeric arguments, got: $v" >&2
-    exit 2
-  fi
-done
-
-if [[ "$count" -le 0 || "$seconds" -le 0 ]]; then
-  echo "--count and --seconds must be > 0" >&2
+if ! [[ "$SAMPLES" =~ ^[0-9]+$ ]] || [[ "$SAMPLES" -le 0 ]]; then
+  echo "Invalid SAMPLES value: $SAMPLES" >&2
+  exit 2
+fi
+if ! [[ "$DURATION" =~ ^[0-9]+$ ]] || [[ "$DURATION" -le 0 ]]; then
+  echo "Invalid DURATION value: $DURATION" >&2
   exit 2
 fi
 
@@ -68,13 +43,16 @@ pid="$(
 
 if [[ -z "$pid" ]]; then
   echo "Could not find a running Chameleon Simulator process." >&2
-  echo "Launch the app in the Simulator, then re-run:" >&2
-  echo "  Scripts/capture_samples.sh" >&2
+  echo "Launch the app in the Simulator (Cmd+R), then re-run:" >&2
+  echo "  cd ~/dev/project-chameleon/Chameleon && Scripts/capture_samples.sh" >&2
   exit 1
 fi
 
-main_extractor="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/extract_sample_main_thread.sh"
-hot_extractor="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/extract_sample_hotspots.sh"
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+repo_root="$(cd "${script_dir}/.." && pwd)"
+
+main_extractor="${script_dir}/extract_sample_main_thread.sh"
+hot_extractor="${script_dir}/extract_sample_hotspots.sh"
 
 if [[ ! -x "$main_extractor" ]]; then
   echo "Missing or not executable: $main_extractor" >&2
@@ -85,21 +63,28 @@ if [[ ! -x "$hot_extractor" ]]; then
   exit 1
 fi
 
-for i in $(seq 1 "$count"); do
-  out_file="chameleon-sample-$i.txt"
-  echo "=== SAMPLE $i (PID=$pid) ==="
-  echo "Capturing: sudo sample \"$pid\" $seconds -file \"$out_file\""
-  sudo sample "$pid" "$seconds" -file "$out_file" >/dev/null
-  echo
-  echo "--- main thread (com.apple.main-thread) ---"
-  if ! "$main_extractor" "$out_file" --lines "$lines_main"; then
-    echo "(main thread extractor failed for $out_file)" >&2
-  fi
-  echo
-  echo "--- hotspots (Sort by top of stack) ---"
-  if ! "$hot_extractor" "$out_file" --lines "$lines_hot"; then
-    echo "(hotspots extractor failed for $out_file)" >&2
-  fi
+ts="$(date +"%Y%m%d-%H%M%S")"
+out_dir="${repo_root}/Scripts/output/${ts}"
+mkdir -p "$out_dir"
+
+for i in $(seq 1 "$SAMPLES"); do
+  sample_file="${out_dir}/chameleon-sample-${i}.txt"
+  main_file="${out_dir}/main-thread-${i}.txt"
+  hot_file="${out_dir}/hotspots-${i}.txt"
+
+  echo "=== SAMPLE $i/$SAMPLES (PID=$pid) ==="
+  echo "Capturing: sudo sample \"$pid\" $DURATION -file \"${sample_file}\""
+  sudo sample "$pid" "$DURATION" -file "$sample_file" >/dev/null
+
+  "${main_extractor}" "$sample_file" --lines 120 >"$main_file"
+  "${hot_extractor}" "$sample_file" --lines 80 >"$hot_file"
+
+  echo "Wrote:"
+  echo "  $sample_file"
+  echo "  $main_file"
+  echo "  $hot_file"
   echo
 done
 
+echo "Done. Output directory:"
+echo "  $out_dir"

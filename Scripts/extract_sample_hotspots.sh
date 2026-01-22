@@ -57,10 +57,9 @@ if grep -q '^Sort by top of stack' "$file"; then
     BEGIN { printing=0; printed=0 }
     /^Sort by top of stack/ { printing=1 }
     printing {
+      if($0 ~ /^[[:space:]]*$/) { exit 0 }
       print
       printed++
-      # Stop at the first blank line after the section begins.
-      if(printed > 1 && $0 ~ /^[[:space:]]*$/) { exit 0 }
     }
   ' "$file" | head -n "$lines"
   exit 0
