@@ -40,7 +40,7 @@ public struct JobDetailView: View {
                 } else {
                     ForEach(changeOrders, id: \.id) { changeOrder in
                         NavigationLink {
-                            ChangeOrderDetailView(changeOrder: changeOrder)
+                            ChangeOrderDetailView(changeOrder: changeOrder, job: job)
                         } label: {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(NumberingService.formatDisplayNumber(job: job, number: changeOrder.number, revisionNumber: changeOrder.revisionNumber))

@@ -26,6 +26,7 @@ public struct ChangeOrderDetailView: View {
 
     @Environment(\.modelContext) private var modelContext
     @Bindable private var changeOrder: ChangeOrderModel
+    private let job: JobModel
 
     @Query private var revisionsForNumber: [ChangeOrderModel]
 
@@ -60,10 +61,11 @@ public struct ChangeOrderDetailView: View {
     @State private var lineItemEditorPayload: LineItemEditorPayload?
     @State private var lineItemError: String?
 
-    public init(changeOrder: ChangeOrderModel) {
+    public init(changeOrder: ChangeOrderModel, job: JobModel) {
         self.changeOrder = changeOrder
+        self.job = job
 
-        let targetJobId: UUID? = changeOrder.job?.id
+        let targetJobId: UUID? = job.id
         let number = changeOrder.number
         let predicate = #Predicate<ChangeOrderModel> { co in
             co.job?.id == targetJobId && co.number == number
@@ -102,7 +104,7 @@ public struct ChangeOrderDetailView: View {
         view = AnyView(
             view.sheet(item: $createdRevision) { co in
                 NavigationStack {
-                    ChangeOrderDetailView(changeOrder: co)
+                    ChangeOrderDetailView(changeOrder: co, job: job)
                 }
             }
         )
@@ -375,9 +377,7 @@ public struct ChangeOrderDetailView: View {
         Section("Change Order") {
             LabeledContent(
                 "Number",
-                value: changeOrder.job.map {
-                    NumberingService.formatDisplayNumber(job: $0, number: changeOrder.number, revisionNumber: changeOrder.revisionNumber)
-                } ?? NumberingService.formatDisplayNumber(number: changeOrder.number, revisionNumber: changeOrder.revisionNumber)
+                value: NumberingService.formatDisplayNumber(job: job, number: changeOrder.number, revisionNumber: changeOrder.revisionNumber)
             )
             if changeOrder.isLocked {
                 LabeledContent("Locked", value: "Yes")
@@ -474,11 +474,10 @@ public struct ChangeOrderDetailView: View {
         Section("Revisions") {
             ForEach(revisionsForNumber, id: \.id) { co in
                 NavigationLink {
-                    ChangeOrderDetailView(changeOrder: co)
+                    ChangeOrderDetailView(changeOrder: co, job: job)
                 } label: {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(co.job.map { NumberingService.formatDisplayNumber(job: $0, number: co.number, revisionNumber: co.revisionNumber) }
-                            ?? NumberingService.formatDisplayNumber(number: co.number, revisionNumber: co.revisionNumber))
+                        Text(NumberingService.formatDisplayNumber(job: job, number: co.number, revisionNumber: co.revisionNumber))
                             .font(.headline)
                         Text(co.isLocked ? "Locked" : "Draft")
                             .font(.subheadline)
@@ -695,10 +694,10 @@ public struct ChangeOrderDetailView: View {
     }
 
     private func resolveLatestPackageZipURL() -> URL? {
-        let changeOrderId = changeOrder.id
+        let target: UUID? = changeOrder.id
         var descriptor = FetchDescriptor<ExportPackageModel>(
             predicate: #Predicate<ExportPackageModel> { model in
-                model.changeOrderId == changeOrderId
+                model.changeOrderId == target
             },
             sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
         )
