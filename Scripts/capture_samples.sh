@@ -67,6 +67,22 @@ ts="$(date +"%Y%m%d-%H%M%S")"
 out_dir="${repo_root}/Scripts/output/${ts}"
 mkdir -p "$out_dir"
 
+created_files=()
+
+run_extractor() {
+  local extractor="$1"
+  local sample_file="$2"
+  local lines="$3"
+  local output_file="$4"
+  local label="$5"
+
+  if ! "${extractor}" "${sample_file}" --lines "${lines}" >"${output_file}"; then
+    echo "Extraction failed (${label}) for: ${sample_file}" >&2
+    echo "Output file: ${output_file}" >&2
+    exit 1
+  fi
+}
+
 for i in $(seq 1 "$SAMPLES"); do
   sample_file="${out_dir}/chameleon-sample-${i}.txt"
   main_file="${out_dir}/main-thread-${i}.txt"
@@ -76,8 +92,10 @@ for i in $(seq 1 "$SAMPLES"); do
   echo "Capturing: sudo sample \"$pid\" $DURATION -file \"${sample_file}\""
   sudo sample "$pid" "$DURATION" -file "$sample_file" >/dev/null
 
-  "${main_extractor}" "$sample_file" --lines 120 >"$main_file"
-  "${hot_extractor}" "$sample_file" --lines 80 >"$hot_file"
+  created_files+=("$sample_file" "$main_file" "$hot_file")
+
+  run_extractor "$main_extractor" "$sample_file" 120 "$main_file" "main-thread"
+  run_extractor "$hot_extractor" "$sample_file" 80 "$hot_file" "hotspots"
 
   echo "Wrote:"
   echo "  $sample_file"
@@ -88,3 +106,7 @@ done
 
 echo "Done. Output directory:"
 echo "  $out_dir"
+echo "Files:"
+for f in "${created_files[@]}"; do
+  echo "  $f"
+done

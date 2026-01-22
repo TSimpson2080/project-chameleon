@@ -18,9 +18,11 @@ fail() {
 [[ -f "$fixture" ]] || fail "Missing fixture: $fixture"
 
 out="$("$main_extractor" "$fixture" --lines 200)" || fail "main extractor failed for fixture"
+[[ -n "$out" ]] || fail "main output is empty"
 echo "$out" | grep -q 'com\.apple\.main-thread' || fail "main output missing com.apple.main-thread"
 
 out="$("$hotspots_extractor" "$fixture" --lines 200)" || fail "hotspots extractor failed for fixture"
+[[ -n "$out" ]] || fail "hotspots output is empty"
 echo "$out" | grep -q '^Sort by top of stack' || fail "hotspots output missing 'Sort by top of stack'"
 
 echo "OK"

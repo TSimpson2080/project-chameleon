@@ -22,6 +22,13 @@ cd ~/dev/project-chameleon/Chameleon
 Scripts/capture_samples.sh
 ```
 
+Customize sample count/duration:
+
+```bash
+cd ~/dev/project-chameleon/Chameleon
+SAMPLES=5 DURATION=3 Scripts/capture_samples.sh
+```
+
 This writes a timestamped folder under `Scripts/output/` containing:
 - `chameleon-sample-<i>.txt` (raw `sample` output)
 - `main-thread-<i>.txt` (Thread 0 equivalent / `com.apple.main-thread` call-graph block)
