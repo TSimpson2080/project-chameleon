@@ -2,7 +2,7 @@ import SwiftUI
 import SwiftData
 
 public struct JobDetailView: View {
-    private struct ChangeOrderRoute: Hashable {
+    private struct ChangeOrderRoute: Identifiable, Hashable {
         let id: UUID
     }
 
@@ -11,6 +11,7 @@ public struct JobDetailView: View {
     @State private var changeOrders: [ChangeOrderModel] = []
     @State private var isLoadingChangeOrders = true
     @State private var changeOrdersErrorMessage: String?
+    @State private var selectedChangeOrderRoute: ChangeOrderRoute?
 
     public init(job: JobModel) {
         self.job = job
@@ -41,7 +42,11 @@ public struct JobDetailView: View {
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(changeOrders, id: \.id) { changeOrder in
-                        NavigationLink(value: ChangeOrderRoute(id: changeOrder.id)) {
+                        Button {
+                            let route = ChangeOrderRoute(id: changeOrder.id)
+                            AppLog.shared.log("JobDetail tap changeOrderId=\(route.id)")
+                            selectedChangeOrderRoute = route
+                        } label: {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(NumberingService.formatDisplayNumber(job: job, number: changeOrder.number, revisionNumber: changeOrder.revisionNumber))
                                     .font(.headline)
@@ -50,13 +55,14 @@ public struct JobDetailView: View {
                                     .foregroundStyle(.secondary)
                             }
                         }
+                        .buttonStyle(.plain)
                     }
                 }
             }
         }
         .navigationTitle(job.clientName)
         .navigationBarTitleDisplayMode(.inline)
-        .navigationDestination(for: ChangeOrderRoute.self) { route in
+        .navigationDestination(item: $selectedChangeOrderRoute) { route in
             ChangeOrderDestinationView(changeOrderId: route.id, job: job)
         }
         .onAppear {
@@ -126,26 +132,51 @@ public struct JobDetailView: View {
 }
 
 private struct ChangeOrderDestinationView: View {
-    @Query private var changeOrders: [ChangeOrderModel]
+    @Environment(\.modelContext) private var modelContext
+
+    private let changeOrderId: UUID
     private let job: JobModel
-
-    init(changeOrderId: UUID, job: JobModel) {
-        self.job = job
-
-        let target: UUID = changeOrderId
-        _changeOrders = Query(
-            filter: #Predicate<ChangeOrderModel> { co in
-                co.id == target
-            },
-            sort: []
-        )
-    }
+    @State private var changeOrder: ChangeOrderModel?
+    @State private var isLoading = true
+    @State private var errorMessage: String?
 
     var body: some View {
-        if let changeOrder = changeOrders.first {
-            ChangeOrderDetailView(changeOrder: changeOrder, job: job)
-        } else {
-            ContentUnavailableView("Change Order Missing", systemImage: "doc.text.magnifyingglass")
+        Group {
+            if isLoading {
+                ProgressView("Loading Change Order…")
+            } else if let changeOrder {
+                ChangeOrderDetailView(changeOrder: changeOrder, job: job)
+            } else {
+                ContentUnavailableView("Change Order Missing", systemImage: "doc.text.magnifyingglass", description: Text(errorMessage ?? ""))
+            }
+        }
+        .task { load() }
+    }
+
+    init(changeOrderId: UUID, job: JobModel) {
+        self.changeOrderId = changeOrderId
+        self.job = job
+    }
+
+    @MainActor
+    private func load() {
+        guard isLoading else { return }
+        AppLog.shared.log("ChangeOrderDestination load start id=\(changeOrderId)")
+        defer { isLoading = false }
+
+        do {
+            let target: UUID = changeOrderId
+            var descriptor = FetchDescriptor<ChangeOrderModel>(
+                predicate: #Predicate<ChangeOrderModel> { co in
+                    co.id == target
+                }
+            )
+            descriptor.fetchLimit = 1
+            changeOrder = try modelContext.fetch(descriptor).first
+            AppLog.shared.log("ChangeOrderDestination load done id=\(changeOrderId) found=\(changeOrder != nil)")
+        } catch {
+            errorMessage = "Could not load change order."
+            AppLog.shared.log("ChangeOrderDestination load failed id=\(changeOrderId) error=\(error)")
         }
     }
 }
