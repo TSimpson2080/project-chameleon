@@ -8,19 +8,12 @@ public struct JobDetailView: View {
 
     @Environment(\.modelContext) private var modelContext
     @Bindable private var job: JobModel
-    @Query private var changeOrders: [ChangeOrderModel]
+    @State private var changeOrders: [ChangeOrderModel] = []
+    @State private var isLoadingChangeOrders = true
+    @State private var changeOrdersErrorMessage: String?
 
     public init(job: JobModel) {
         self.job = job
-
-        let targetJobId: UUID? = job.id
-        let predicate = #Predicate<ChangeOrderModel> { changeOrder in
-            changeOrder.job?.id == targetJobId
-        }
-        _changeOrders = Query(
-            filter: predicate,
-            sort: [SortDescriptor(\.number), SortDescriptor(\.revisionNumber)]
-        )
     }
 
     public var body: some View {
@@ -38,7 +31,12 @@ public struct JobDetailView: View {
             }
 
             Section("Change Orders") {
-                if changeOrders.isEmpty {
+                if isLoadingChangeOrders {
+                    ProgressView("Loading…")
+                } else if let changeOrdersErrorMessage {
+                    Text(changeOrdersErrorMessage)
+                        .foregroundStyle(.secondary)
+                } else if changeOrders.isEmpty {
                     Text("No change orders yet.")
                         .foregroundStyle(.secondary)
                 } else {
@@ -66,6 +64,7 @@ public struct JobDetailView: View {
                 HangDiagnostics.shared.setCurrentScreen("JobDetail")
             }
         }
+        .task { await loadChangeOrders() }
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
                 NavigationLink {
@@ -75,7 +74,7 @@ public struct JobDetailView: View {
                 }
                 .accessibilityLabel("Verified Packages")
 
-                Button("New Change Order") { createNewChangeOrder() }
+                    Button("New Change Order") { createNewChangeOrder() }
             }
         }
     }
@@ -99,6 +98,7 @@ public struct JobDetailView: View {
             changeOrder.subtotal = pricing.subtotal
             changeOrder.total = pricing.total
             try repository.save()
+            Task { await loadChangeOrders() }
         } catch {
             assertionFailure("Failed to create change order: \(error)")
         }
@@ -108,6 +108,20 @@ public struct JobDetailView: View {
         var descriptor = FetchDescriptor<CompanyProfileModel>()
         descriptor.fetchLimit = 1
         return (try? modelContext.fetch(descriptor).first)?.defaultTaxRate
+    }
+
+    @MainActor
+    private func loadChangeOrders() async {
+        do {
+            isLoadingChangeOrders = true
+            changeOrdersErrorMessage = nil
+
+            let repository = ChangeOrderRepository(modelContext: modelContext)
+            changeOrders = try repository.fetchChangeOrders(for: job, search: nil)
+        } catch {
+            changeOrdersErrorMessage = "Could not load change orders."
+        }
+        isLoadingChangeOrders = false
     }
 }
 

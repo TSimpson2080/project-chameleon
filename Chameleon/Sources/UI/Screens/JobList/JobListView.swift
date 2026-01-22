@@ -4,8 +4,9 @@ import SwiftData
 public struct JobListView: View {
     @Environment(\.modelContext) private var modelContext
 
-    @Query(sort: \JobModel.updatedAt, order: .reverse)
-    private var jobs: [JobModel]
+    @State private var jobs: [JobModel] = []
+    @State private var isLoadingJobs = true
+    @State private var jobsErrorMessage: String?
 
     @State private var searchText = ""
     @State private var isPresentingNewJobSheet = false
@@ -15,7 +16,18 @@ public struct JobListView: View {
     public var body: some View {
         NavigationStack {
             Group {
-                if filteredJobs.isEmpty {
+                if isLoadingJobs {
+                    ProgressView("Loading Jobs…")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if let jobsErrorMessage {
+                    ContentUnavailableView("Jobs Unavailable", systemImage: "exclamationmark.triangle")
+                        .overlay(alignment: .bottom) {
+                            Text(jobsErrorMessage)
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                                .padding()
+                        }
+                } else if filteredJobs.isEmpty {
                     ContentUnavailableView(
                         "No Jobs",
                         systemImage: "briefcase",
@@ -45,6 +57,7 @@ public struct JobListView: View {
                     HangDiagnostics.shared.setCurrentScreen("JobList")
                 }
             }
+            .task { await loadJobs() }
             .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always))
             .toolbar {
                 ToolbarItemGroup(placement: .topBarTrailing) {
@@ -71,6 +84,7 @@ public struct JobListView: View {
                         projectName: draft.projectName,
                         address: draft.address
                     )
+                    Task { await loadJobs() }
                 }
             }
         }
@@ -90,15 +104,31 @@ public struct JobListView: View {
     }
 
     private func deleteJobs(at offsets: IndexSet) {
-        for index in offsets {
-            modelContext.delete(filteredJobs[index])
+        Task { @MainActor in
+            do {
+                let repository = JobRepository(modelContext: modelContext)
+                for index in offsets {
+                    try repository.deleteJob(filteredJobs[index])
+                }
+                await loadJobs()
+            } catch {
+                jobsErrorMessage = "Failed to delete job(s)."
+            }
         }
+    }
 
+    @MainActor
+    private func loadJobs() async {
         do {
-            try modelContext.save()
+            isLoadingJobs = true
+            jobsErrorMessage = nil
+
+            let repository = JobRepository(modelContext: modelContext)
+            jobs = try repository.fetchJobs(search: nil)
         } catch {
-            assertionFailure("Failed to delete jobs: \(error)")
+            jobsErrorMessage = "Could not load jobs."
         }
+        isLoadingJobs = false
     }
 }
 
