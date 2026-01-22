@@ -59,8 +59,8 @@ DerivedData/
 /*.gcno
 
 ### Projects ###
-*.xcodeproj
-*.xcworkspace
+# NOTE: We commit the generated Xcode project/workspace so App Store Connect / Xcode Cloud
+# can build from a clean clone without running `tuist generate`.
 
 ### Tuist derived files ###
 graph.dot
