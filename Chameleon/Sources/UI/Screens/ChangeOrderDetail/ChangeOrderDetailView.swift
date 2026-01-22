@@ -29,6 +29,8 @@ public struct ChangeOrderDetailView: View {
     private let job: JobModel
 
     @Query private var revisionsForNumber: [ChangeOrderModel]
+    @Query private var lineItemsForChangeOrder: [LineItemModel]
+    @Query private var attachmentsForChangeOrder: [AttachmentModel]
 
     @State private var pdfPreview: PDFPreviewPayload?
     @State private var pdfErrorMessage: String?
@@ -71,6 +73,23 @@ public struct ChangeOrderDetailView: View {
             co.job?.id == targetJobId && co.number == number
         }
         _revisionsForNumber = Query(filter: predicate, sort: [SortDescriptor(\.revisionNumber, order: .reverse)])
+
+        let targetChangeOrderId: UUID? = changeOrder.id
+        _lineItemsForChangeOrder = Query(
+            filter: #Predicate<LineItemModel> { item in
+                item.changeOrder?.id == targetChangeOrderId
+            },
+            sort: [
+                SortDescriptor(\.sortIndex),
+                SortDescriptor(\.createdAt),
+            ]
+        )
+        _attachmentsForChangeOrder = Query(
+            filter: #Predicate<AttachmentModel> { attachment in
+                attachment.changeOrder?.id == targetChangeOrderId
+            },
+            sort: [SortDescriptor(\.createdAt)]
+        )
     }
 
     public var body: some View {
@@ -323,7 +342,6 @@ public struct ChangeOrderDetailView: View {
                 defer { isExportingPackage = false }
 
                 do {
-                    guard let job = changeOrder.job else { throw ExportPackageService.ExportError.missingJob }
                     let service = try ExportPackageService(modelContext: modelContext)
                     let export = try service.exportChangeOrderPackage(changeOrder: changeOrder, job: job)
                     let zipURL = service.urlForExportRelativePath(export.zipPath)
@@ -355,14 +373,11 @@ public struct ChangeOrderDetailView: View {
     }
 
     private var photoAttachments: [AttachmentModel] {
-        changeOrder.attachments.filter { $0.type == .photo }
+        attachmentsForChangeOrder.filter { $0.type == .photo }
     }
 
     private var sortedLineItems: [LineItemModel] {
-        changeOrder.lineItems.sorted { lhs, rhs in
-            if lhs.sortIndex != rhs.sortIndex { return lhs.sortIndex < rhs.sortIndex }
-            return lhs.createdAt < rhs.createdAt
-        }
+        lineItemsForChangeOrder
     }
 
     private var taxRate: Decimal {
@@ -370,7 +385,7 @@ public struct ChangeOrderDetailView: View {
     }
 
     private var pricingBreakdown: PricingBreakdown {
-        PricingCalculator.calculate(lineItems: changeOrder.lineItems, taxRate: taxRate)
+        PricingCalculator.calculate(lineItems: lineItemsForChangeOrder, taxRate: taxRate)
     }
 
     private var changeOrderSection: some View {
@@ -567,12 +582,8 @@ public struct ChangeOrderDetailView: View {
         do {
             let fileStorage = try FileStorageManager()
             let company = fetchCompanyProfile()
-            guard let job = changeOrder.job else {
-                pdfErrorMessage = "Missing job."
-                return
-            }
 
-            let photoAttachments = changeOrder.attachments.filter { $0.type == .photo }
+            let photoAttachments = attachmentsForChangeOrder.filter { $0.type == .photo }
             let photoURLs = photoAttachments.map { fileStorage.url(forRelativePath: $0.filePath) }
             let photoCaptions = photoAttachments.map(\.caption)
 
@@ -591,15 +602,15 @@ public struct ChangeOrderDetailView: View {
                 return
             }
 
-            let signaturePath = changeOrder.attachments.first(where: { $0.type == .signatureClient })?.filePath
+            let signaturePath = attachmentsForChangeOrder.first(where: { $0.type == .signatureClient })?.filePath
             let signatureImage = signaturePath.map { UIImage(contentsOfFile: fileStorage.url(forRelativePath: $0).path) } ?? nil
             let companyName = company?.companyName.trimmingCharacters(in: .whitespacesAndNewlines)
             let companyLogoImage = company?.logoPath.flatMap { logoPath in
                 UIImage(contentsOfFile: fileStorage.url(forRelativePath: logoPath).path)
             }
 
-            let breakdown = PricingCalculator.calculate(lineItems: changeOrder.lineItems, taxRate: Money.clampTaxRate(changeOrder.taxRate))
-            let pdfLineItems = sortedLineItems.map { item in
+            let breakdown = PricingCalculator.calculate(lineItems: lineItemsForChangeOrder, taxRate: Money.clampTaxRate(changeOrder.taxRate))
+            let pdfLineItems = lineItemsForChangeOrder.map { item in
                 let quantity = Money.nonNegative(item.quantity)
                 let unitPrice = Money.nonNegative(item.unitPrice)
                 let lineTotal = Money.round(quantity * unitPrice)
@@ -613,9 +624,7 @@ public struct ChangeOrderDetailView: View {
             }
 
             let input = PDFGenerator.Input(
-                changeOrderNumberText: changeOrder.job.map {
-                    NumberingService.formatDisplayNumber(job: $0, number: changeOrder.number, revisionNumber: changeOrder.revisionNumber)
-                } ?? NumberingService.formatDisplayNumber(number: changeOrder.number, revisionNumber: changeOrder.revisionNumber),
+                changeOrderNumberText: NumberingService.formatDisplayNumber(job: job, number: changeOrder.number, revisionNumber: changeOrder.revisionNumber),
                 title: changeOrder.title,
                 details: changeOrder.details,
                 createdAt: changeOrder.createdAt,
