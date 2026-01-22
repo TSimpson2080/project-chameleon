@@ -1,0 +1,13 @@
+Analysis of sampling ExampleApp (pid 123) every 1 millisecond
+----
+
+Call graph:
+    120 Thread_1111   DispatchQueue_1: com.apple.main-thread  (serial)
+    + 120 start  (in dyld) + 1
+    + 120 UIApplicationMain  (in UIKitCore) + 2
+    120 Thread_2222: com.apple.uikit.eventfetch-thread
+    + 120 thread_start  (in libsystem_pthread.dylib) + 0
+
+Sort by top of stack, same collapsed (when >= 5):
+        start_wqthread  (in libsystem_pthread.dylib)        10
+

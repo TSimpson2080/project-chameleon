@@ -1,0 +1,16 @@
+Analysis of sampling ExampleApp (pid 123) every 1 millisecond
+
+Thread 0:
+Dispatch Queue: com.apple.main-thread
+    0  start + 1
+    1  UIApplicationMain + 2
+    2  CFRunLoopRun + 3
+
+Thread 1:
+Dispatch Queue: com.apple.root.default-qos
+    0  start_wqthread + 0
+
+Sort by top of stack, same collapsed (when >= 5):
+        start_wqthread  (in libsystem_pthread.dylib)        43335
+        mach_msg2_trap  (in libsystem_kernel.dylib)        17334
+
